@@ -984,6 +984,30 @@ final class MMF_Images {
 			}
 		}
 
+
+		// Avatars are files too, and nobody should press a button for them: walk
+		// the users, convert what has no copy, and let the cron carry on next run.
+		if ( $done < 20 && function_exists( 'get_avatar_url' ) && class_exists( 'MMF_Avatars' ) ) {
+			$users = function_exists( 'get_users' ) ? get_users( array( 'fields' => 'ID', 'number' => 200 ) ) : array();
+			$saved = isset( $_SERVER['HTTP_ACCEPT'] ) ? (string) $_SERVER['HTTP_ACCEPT'] : '';
+
+			$_SERVER['HTTP_ACCEPT'] = 'image/webp';
+
+			foreach ( (array) $users as $user_id ) {
+				if ( ( microtime( true ) - $start ) > 20 ) {
+					break;
+				}
+
+				$url = get_avatar_url( (int) $user_id, array( 'size' => 96 ) );
+
+				if ( is_string( $url ) && '' !== $url && MMF_Avatars::webp_url( $url ) !== $url ) {
+					$done++;
+				}
+			}
+
+			$_SERVER['HTTP_ACCEPT'] = $saved;
+		}
+
 		if ( 0 === $done ) {
 			delete_option( 'mmf_rebuild_sidecars' );
 		}

@@ -2685,7 +2685,6 @@ final class MMF_Admin {
 				__( 'Аватаров на сайте', 'modern-minify' )       => (string) (int) $avatars['total'],
 				__( 'С копией WebP', 'modern-minify' )           => (string) (int) $avatars['with_copy'],
 				__( 'Без копии', 'modern-minify' )               => (string) (int) $avatars['without'],
-				__( 'Показов аватаров', 'modern-minify' )        => (string) (int) $stats['avatar_found'],
 				__( 'Нет поддержки WebP в PHP', 'modern-minify' ) => (string) (int) $stats['avatar_fail_support'],
 				__( 'Не JPEG/PNG', 'modern-minify' )             => (string) (int) $stats['avatar_fail_type'],
 				__( 'Ошибка записи', 'modern-minify' )           => (string) (int) $stats['avatar_fail_write'],
@@ -2695,12 +2694,6 @@ final class MMF_Admin {
 			)
 		);
 
-		$avatars_url = wp_nonce_url(
-			add_query_arg( array( 'page' => self::PAGE, 'action' => 'mmf_convert_avatars' ), admin_url( 'options-general.php' ) ),
-			self::AVATARS_NONCE
-		);
-
-		echo '<p class="mmf-actions"><a class="button mmf-convert-avatars" href="' . esc_url( $avatars_url ) . '">' . esc_html__( 'Конвертировать все аватары', 'modern-minify' ) . '</a></p>';
 
 		$fmt = static function ( $value ) {
 			return (int) $value > 0 ? (string) (int) $value : '—';
