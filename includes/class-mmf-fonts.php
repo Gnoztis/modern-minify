@@ -432,10 +432,13 @@ final class MMF_Fonts {
 	/**
 	 * Rewrites relative `url()` references in a stylesheet to absolute ones.
 	 *
+	 * Public because a localised external stylesheet needs the same treatment:
+	 * its font files stay on the original host.
+	 *
 	 * @param string $base Stylesheet URL.
 	 * @param string $css  Stylesheet body.
 	 */
-	private static function absolutize_urls( string $base, string $css ): string {
+	public static function absolutize_urls( string $base, string $css ): string {
 		$rewritten = preg_replace_callback(
 			'/url\(\s*([\'"]?)([^\'")]+)\1\s*\)/i',
 			static function ( $match ) use ( $base ) {

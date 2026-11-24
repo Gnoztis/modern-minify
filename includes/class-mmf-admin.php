@@ -173,6 +173,11 @@ final class MMF_Admin {
 			}
 
 			echo '</tbody></table>';
+
+			if ( 'advanced' === $slug ) {
+				self::render_external_note();
+			}
+
 			echo '</div>';
 		}
 
@@ -217,7 +222,7 @@ final class MMF_Admin {
 			'css'        => array( 'minify_css', 'merge_css', 'inline_css', 'inline_css_limit', 'remove_print_css', 'exclude_css' ),
 			'fonts'      => array( 'fonts_method', 'fawesome_method' ),
 			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_generator', 'remove_emoji', 'ver_mode' ),
-			'advanced'   => array( 'cache_ttl', 'test_mode', 'debug' ),
+			'advanced'   => array( 'cache_ttl', 'test_mode', 'debug', 'external_mode', 'external_max_size', 'external_exclude' ),
 		);
 	}
 
@@ -340,6 +345,18 @@ final class MMF_Admin {
 				__( 'Режим отладки', 'modern-minify' ),
 				__( 'Подробности на этом экране; записей в лог нет.', 'modern-minify' ),
 			),
+			'external_mode'          => array(
+				__( 'Внешние файлы', 'modern-minify' ),
+				__( 'Локально — скачать в кеш и отдавать со своего домена; не трогать; удалить теги (по умолчанию выключено, потому что ломает функциональность).', 'modern-minify' ),
+			),
+			'external_max_size'      => array(
+				__( 'Предел размера внешнего файла, МиБ', 'modern-minify' ),
+				__( 'Файл больше предела не скачивается: тег остаётся исходным.', 'modern-minify' ),
+			),
+			'external_exclude'       => array(
+				__( 'Оставить внешними', 'modern-minify' ),
+				__( 'Дополнительные хосты или части URL через строку. Встроенный список API-скриптов показан ниже.', 'modern-minify' ),
+			),
 		);
 	}
 
@@ -363,6 +380,11 @@ final class MMF_Admin {
 				'hash'   => __( 'Заменить на хеш содержимого', 'modern-minify' ),
 				'remove' => __( 'Удалить параметр', 'modern-minify' ),
 				'keep'   => __( 'Не трогать', 'modern-minify' ),
+			),
+			'external_mode'   => array(
+				'local'  => __( 'Скачать и отдавать со своего домена', 'modern-minify' ),
+				'keep'   => __( 'Не трогать', 'modern-minify' ),
+				'remove' => __( 'Удалить теги (ломает функциональность)', 'modern-minify' ),
 			),
 		);
 	}
@@ -481,6 +503,11 @@ final class MMF_Admin {
 			__( 'Скриптов перенесено в подвал', 'modern-minify' ) => (string) (int) $stats['moved'],
 			__( 'Скриптов отложено, всего', 'modern-minify' ) => (string) (int) $stats['delayed'],
 			__( 'Отложено на последней учтённой странице', 'modern-minify' ) => (string) (int) $stats['last_delayed'],
+			__( 'Внешних файлов локализовано', 'modern-minify' ) => (string) (int) $stats['external_localized'],
+			__( 'Внешних оставлено', 'modern-minify' )     => (string) (int) $stats['external_kept'],
+			__( 'Внешних не удалось скачать', 'modern-minify' ) => (string) (int) $stats['external_failed'],
+			__( 'Внешних тегов удалено', 'modern-minify' ) => (string) (int) $stats['external_removed'],
+			__( 'Предупреждений о шрифтах', 'modern-minify' ) => (string) (int) $stats['font_warnings'],
 			__( 'Ошибок обработки', 'modern-minify' )      => (string) (int) $stats['failed'],
 			__( 'Файлов в кеше', 'modern-minify' )         => (string) (int) $cache['files'],
 			__( 'Размер кеша', 'modern-minify' )           => size_format( (int) $cache['size'] ),
@@ -492,6 +519,8 @@ final class MMF_Admin {
 		}
 
 		echo '</tbody></table>';
+
+		self::render_external_report( $stats );
 
 		printf(
 			'<p class="description">%s %s</p>',
@@ -511,6 +540,72 @@ final class MMF_Admin {
 		);
 
 		echo '<p class="mmf-actions"><a class="button mmf-reset" href="' . esc_url( $reset_url ) . '">' . esc_html__( 'Сбросить кеш', 'modern-minify' ) . '</a></p>';
+	}
+
+	/**
+	 * Prints the external hosts of the last counted page.
+	 *
+	 * @param array<string,mixed> $stats Counters.
+	 */
+	private static function render_external_report( array $stats ): void {
+		$report = isset( $stats['last_external'] ) && is_array( $stats['last_external'] ) ? $stats['last_external'] : array();
+
+		echo '<h2>' . esc_html__( 'Внешние хосты на последней учтённой странице', 'modern-minify' ) . '</h2>';
+
+		if ( array() === $report ) {
+			echo '<p class="description">' . esc_html__( 'Внешних файлов не найдено.', 'modern-minify' ) . '</p>';
+
+			return;
+		}
+
+		$labels = array(
+			'localized' => __( 'локализован', 'modern-minify' ),
+			'excluded'  => __( 'оставлен внешним (исключение)', 'modern-minify' ),
+			'kept'      => __( 'оставлен внешним (режим)', 'modern-minify' ),
+			'failed'    => __( 'не удалось скачать', 'modern-minify' ),
+			'removed'   => __( 'тег удалён', 'modern-minify' ),
+		);
+
+		echo '<table class="widefat striped mmf-status-table"><thead><tr>';
+		echo '<th>' . esc_html__( 'Хост', 'modern-minify' ) . '</th>';
+		echo '<th>' . esc_html__( 'Что сделано', 'modern-minify' ) . '</th>';
+		echo '</tr></thead><tbody>';
+
+		$lines = array();
+
+		foreach ( $report as $entry ) {
+			if ( ! is_array( $entry ) || ! isset( $entry['host'], $entry['status'] ) ) {
+				continue;
+			}
+
+			$host   = (string) $entry['host'];
+			$status = (string) $entry['status'];
+			$label  = isset( $labels[ $status ] ) ? $labels[ $status ] : $status;
+
+			echo '<tr><td><code>' . esc_html( $host ) . '</code></td><td>' . esc_html( $label ) . '</td></tr>';
+
+			$lines[] = $host . ' — ' . $label;
+		}
+
+		echo '</tbody></table>';
+
+		echo '<p class="description">' . esc_html__( 'Этот список можно скопировать и прислать как диагностику:', 'modern-minify' ) . '</p>';
+		echo '<textarea readonly rows="' . esc_attr( (string) max( 2, count( $lines ) ) ) . '" class="large-text code">' . esc_textarea( implode( "\n", $lines ) ) . '</textarea>';
+	}
+
+	/**
+	 * Prints the built-in exclusion list on the advanced tab.
+	 */
+	private static function render_external_note(): void {
+		echo '<h2>' . esc_html__( 'Внешние файлы: встроенный список исключений', 'modern-minify' ) . '</h2>';
+		echo '<p class="description">' . esc_html__( 'Эти хосты не локализуются: их скрипты сверяют домен в Referer или Origin, и локальная копия ломает виджет. Список расширяется фильтром mmf_external_excluded.', 'modern-minify' ) . '</p>';
+		echo '<ul class="mmf-excludes">';
+
+		foreach ( MMF_External::DEFAULT_EXCLUDES as $needle ) {
+			echo '<li><code>' . esc_html( (string) $needle ) . '</code></li>';
+		}
+
+		echo '</ul>';
 	}
 
 	/**
@@ -576,6 +671,7 @@ final class MMF_Admin {
 			. '.mmf-wrap .mmf-status--on{background:#edfaef;color:#0a6b1f}'
 			. '.mmf-wrap .mmf-status--off{background:#fcf0f1;color:#8a1111}'
 			. '.mmf-wrap .mmf-status-table{margin:12px 0;max-width:640px}'
+			. '.mmf-wrap .mmf-excludes{display:flex;flex-wrap:wrap;gap:4px 18px;margin:8px 0 0;padding:0;list-style:none}'
 			. '.mmf-wrap .mmf-actions{margin-top:16px}';
 	}
 

@@ -230,12 +230,18 @@ final class MMF_Frontend {
 			$stats = array( 'pages' => 1 );
 
 			foreach ( (array) ( $assets['stats'] ?? array() ) as $key => $value ) {
-				$stats[ $key ] = (int) $value;
+				if ( is_int( $value ) ) {
+					$stats[ $key ] = $value;
+				}
 			}
 
 			// The status screen shows the last counted page separately: "how many
 			// scripts were delayed here" is a per-page number, not a total.
 			$stats['last_delayed'] = (int) ( $assets['stats']['delayed'] ?? 0 );
+
+			$stats['last_external'] = is_array( $assets['stats']['external_report'] ?? null )
+				? $assets['stats']['external_report']
+				: array();
 
 			MMF_Stats::record( $stats );
 

@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Modern Minify
  * Description:       Минификация CSS, JS и HTML, асинхронная загрузка файлов и обработка Google Fonts.
- * Version:           0.4.0
+ * Version:           0.4.1
  * Requires at least: 7.0
  * Tested up to:      7.1
  * Requires PHP:      8.0
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'MMF_VERSION', '0.4.0' );
+define( 'MMF_VERSION', '0.4.1' );
 define( 'MMF_PLUGIN_FILE', __FILE__ );
 define( 'MMF_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MMF_URL', plugin_dir_url( __FILE__ ) );
@@ -32,6 +32,7 @@ require_once MMF_DIR . 'includes/class-mmf-minifier.php';
 require_once MMF_DIR . 'includes/class-mmf-html.php';
 require_once MMF_DIR . 'includes/class-mmf-assets.php';
 require_once MMF_DIR . 'includes/class-mmf-loader.php';
+require_once MMF_DIR . 'includes/class-mmf-external.php';
 require_once MMF_DIR . 'includes/class-mmf-fonts.php';
 require_once MMF_DIR . 'includes/class-mmf-stats.php';
 require_once MMF_DIR . 'includes/class-mmf-conflicts.php';

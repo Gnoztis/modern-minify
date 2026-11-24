@@ -44,8 +44,10 @@ final class MMF_Config {
 	 *    take their defaults, which hide the version.
 	 * 5: Delay JS arrived (`delay_js`, `delay_js_exclude`, `delay_js_timeout`);
 	 *    empty patterns mean nothing is delayed, which is the safe default.
+	 * 6: external files default to `local` (`external_mode`, `external_max_size`,
+	 *    `external_exclude`); a site that wants the old behaviour sets `keep`.
 	 */
-	public const SCHEMA = 5;
+	public const SCHEMA = 6;
 
 	/**
 	 * Upper bound of one exclusion list, in entries.
@@ -157,6 +159,27 @@ final class MMF_Config {
 				'default' => 5,
 				'min'     => 1,
 				'max'     => 30,
+			),
+			// External files: `local` copies them into the cache and serves them
+			// from this site, `keep` leaves the tag alone, `remove` deletes it.
+			// `local` is the default because a third-party request leaks the
+			// visitor's IP and Referer and adds a foreign host to script-src.
+			'external_mode'          => array(
+				'type'    => 'choice',
+				'default' => 'local',
+				'choices' => array( 'local', 'keep', 'remove' ),
+			),
+			// Size cap of one downloaded file, in MiB.
+			'external_max_size'      => array(
+				'type'    => 'int',
+				'default' => 2,
+				'min'     => 1,
+				'max'     => 20,
+			),
+			// Extra hosts or URL fragments that must stay external.
+			'external_exclude'       => array(
+				'type'    => 'list',
+				'default' => array(),
 			),
 			'exclude_js'             => array(
 				'type'    => 'list',

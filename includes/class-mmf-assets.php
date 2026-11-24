@@ -79,6 +79,8 @@ final class MMF_Assets {
 		$stats    = array();
 		$settings = is_array( $settings ) ? $settings : array();
 
+		MMF_External::reset();
+
 		if ( '' === $html ) {
 			return array(
 				'html'  => $html,
@@ -100,7 +102,8 @@ final class MMF_Assets {
 			&& empty( $settings['remove_print_css'] )
 			&& empty( $settings['move_scripts_to_footer'] )
 			&& 'off' === $fonts
-			&& 'off' === $fawesome ) {
+			&& 'off' === $fawesome
+			&& MMF_External::MODE_KEEP === MMF_External::mode( $settings ) ) {
 			return array(
 				'html'  => $html,
 				'stats' => $stats,
@@ -244,6 +247,9 @@ final class MMF_Assets {
 			$stats['moved'] = count( $moved );
 		}
 
+		// The status screen lists the external hosts of the page just rewritten.
+		$stats['external_report'] = MMF_External::report();
+
 		return array(
 			'html'  => $out,
 			'stats' => $stats,
@@ -343,8 +349,25 @@ final class MMF_Assets {
 
 		$is_local = self::is_local_url( $src );
 
-		// External files are not minified and not rewritten, but they may still
-		// be delayed: that is the whole point of delaying third-party widgets.
+		// External files: by default they are copied into the cache and served
+		// from this site, so the visitor never talks to the CDN.
+		if ( ! $is_local ) {
+			$external = MMF_External::process( $tag, $settings );
+
+			$result['stats'] = self::merge_stats( $result['stats'], (array) ( $external['stats'] ?? array() ) );
+
+			if ( ! empty( $external['handled'] ) ) {
+				$tag           = (string) ( $external['tag'] ?? '' );
+				$result['tag'] = $tag;
+
+				if ( '' === $tag ) {
+					return $result;
+				}
+			}
+		}
+
+		// Local files are minified and rewritten; an external file that was just
+		// localised is not minified here but is delayed like any other tag.
 		if ( $is_local && ! empty( $settings['minify_js'] ) ) {
 			$file = self::prepare_file( $src, 'js' );
 
@@ -535,7 +558,22 @@ final class MMF_Assets {
 			return $result;
 		}
 
-		if ( ! self::is_local_url( $href ) || empty( $settings['minify_css'] ) ) {
+		if ( ! self::is_local_url( $href ) ) {
+			$external = MMF_External::process( $tag, $settings );
+
+			if ( ! empty( $external['handled'] ) ) {
+				return array(
+					'tag'   => (string) ( $external['tag'] ?? '' ),
+					'stats' => (array) ( $external['stats'] ?? array() ),
+				);
+			}
+
+			$result['stats'] = self::merge_stats( $result['stats'], (array) ( $external['stats'] ?? array() ) );
+
+			return $result;
+		}
+
+		if ( empty( $settings['minify_css'] ) ) {
 			return $result;
 		}
 
@@ -893,9 +931,12 @@ final class MMF_Assets {
 	 * This is a prefix check only; whether the file exists is decided later, by
 	 * `prepare_file()`.
 	 *
+	 * Public because the external handler has to tell a file of this site from a
+	 * third-party one, and both must answer that question the same way.
+	 *
 	 * @param string $url URL from a tag.
 	 */
-	private static function is_local_url( string $url ): bool {
+	public static function is_local_url( string $url ): bool {
 		$absolute = self::absolute_url( trim( html_entity_decode( $url, ENT_QUOTES, 'UTF-8' ) ) );
 
 		if ( '' === $absolute ) {

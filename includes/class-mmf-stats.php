@@ -37,21 +37,30 @@ final class MMF_Stats {
 	/**
 	 * Known counters and their initial value.
 	 *
-	 * @return array<string,int>
+	 * `last_external` is not a number: it is the list of external hosts seen on
+	 * the last counted page, with what happened to each of them.
+	 *
+	 * @return array<string,mixed>
 	 */
 	public static function defaults(): array {
 		return array(
-			'pages'        => 0,
-			'files'        => 0,
-			'inline'       => 0,
-			'async'        => 0,
-			'defer'        => 0,
-			'moved'        => 0,
-			'print'        => 0,
-			'failed'       => 0,
-			'delayed'      => 0,
-			'last_delayed' => 0,
-			'updated'      => 0,
+			'pages'              => 0,
+			'files'              => 0,
+			'inline'             => 0,
+			'async'              => 0,
+			'defer'              => 0,
+			'moved'              => 0,
+			'print'              => 0,
+			'failed'             => 0,
+			'delayed'            => 0,
+			'last_delayed'       => 0,
+			'external_localized' => 0,
+			'external_kept'      => 0,
+			'external_failed'    => 0,
+			'external_removed'   => 0,
+			'font_warnings'      => 0,
+			'last_external'      => array(),
+			'updated'            => 0,
 		);
 	}
 
@@ -59,9 +68,9 @@ final class MMF_Stats {
 	 * Stored counters, unknown keys dropped.
 	 *
 	 * The option is a boundary value: it can hold anything after a bad import or
-	 * a broken update. Every value is type-checked before it is used as a number.
+	 * a broken update. Every value is type-checked before it is used.
 	 *
-	 * @return array<string,int>
+	 * @return array<string,mixed>
 	 */
 	public static function all(): array {
 		$stored = get_option( self::OPTION, array() );
@@ -75,7 +84,9 @@ final class MMF_Stats {
 		foreach ( self::defaults() as $key => $default ) {
 			$value = $stored[ $key ] ?? $default;
 
-			if ( is_bool( $value ) ) {
+			if ( 'last_external' === $key ) {
+				$known[ $key ] = self::sanitize_report( $value );
+			} elseif ( is_bool( $value ) ) {
 				$known[ $key ] = (int) $value;
 			} elseif ( is_numeric( $value ) ) {
 				$known[ $key ] = (int) $value;
@@ -100,6 +111,11 @@ final class MMF_Stats {
 		$clean = array();
 
 		foreach ( $delta as $key => $count ) {
+			if ( 'last_external' === $key ) {
+				$clean[ $key ] = self::sanitize_report( $count );
+				continue;
+			}
+
 			if ( is_scalar( $count ) && is_numeric( $count ) && (int) $count > 0 ) {
 				$clean[ $key ] = (int) $count;
 			}
@@ -117,9 +133,9 @@ final class MMF_Stats {
 		}
 
 		foreach ( $clean as $key => $count ) {
-			if ( 'last_delayed' === $key ) {
-				// A snapshot of the last counted page, not a running total.
-				$stats['last_delayed'] = $count;
+			if ( 'last_delayed' === $key || 'last_external' === $key ) {
+				// Snapshots of the last counted page, not running totals.
+				$stats[ $key ] = $count;
 				continue;
 			}
 
@@ -132,6 +148,44 @@ final class MMF_Stats {
 
 		// Not autoloaded: read once on the admin screen, never on a page view.
 		update_option( self::OPTION, $stats, false );
+	}
+
+	/**
+	 * Normalises the list of external hosts of the last page.
+	 *
+	 * @param mixed $value Raw stored or reported value.
+	 * @return array<int,array{host:string,status:string}>
+	 */
+	private static function sanitize_report( $value ): array {
+		if ( ! is_array( $value ) ) {
+			return array();
+		}
+
+		$report = array();
+
+		foreach ( $value as $entry ) {
+			if ( ! is_array( $entry ) ) {
+				continue;
+			}
+
+			$host   = isset( $entry['host'] ) && is_string( $entry['host'] ) ? sanitize_text_field( $entry['host'] ) : '';
+			$status = isset( $entry['status'] ) && is_string( $entry['status'] ) ? sanitize_key( $entry['status'] ) : '';
+
+			if ( '' === $host || '' === $status ) {
+				continue;
+			}
+
+			$report[] = array(
+				'host'   => $host,
+				'status' => $status,
+			);
+
+			if ( count( $report ) >= 50 ) {
+				break;
+			}
+		}
+
+		return $report;
 	}
 
 	/**
