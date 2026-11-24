@@ -927,7 +927,10 @@ final class MMF_Images {
 	 * Schedules or clears the fallback depending on the option.
 	 */
 	public static function sync_cron(): void {
-		$on = (bool) MMF_Config::get( 'image_webp_ondemand', false );
+		// A pending rebuild needs the cron even when on-demand conversion is off:
+		// that is exactly the case after a quality change, when every copy was
+		// deleted and nothing else would bring them back.
+		$on = (bool) MMF_Config::get( 'image_webp_ondemand', false ) || (bool) get_option( 'mmf_rebuild_sidecars', false );
 
 		if ( $on && ! wp_next_scheduled( self::CRON_HOOK ) ) {
 			wp_schedule_event( time() + 300, 'mmf_five_minutes', self::CRON_HOOK );

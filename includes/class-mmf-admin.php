@@ -83,6 +83,7 @@ final class MMF_Admin {
 		// message. Handling the flag on admin_init avoids the dispatch entirely.
 		add_action( 'admin_init', array( __CLASS__, 'maybe_handle_apply_advice' ) );
 		add_action( 'admin_init', array( __CLASS__, 'handle_delete_webp' ) );
+		add_action( 'admin_init', array( __CLASS__, 'handle_rebuild_webp' ) );
 		add_action( 'admin_post_mmf_css_action', array( __CLASS__, 'handle_css_action' ) );
 		add_action( 'admin_init', array( __CLASS__, 'handle_convert_avatars' ) );
 		add_action( 'wp_ajax_mmf_webp_start', array( __CLASS__, 'ajax_webp_start' ) );
@@ -1515,6 +1516,7 @@ final class MMF_Admin {
 			'advice-blocked'     => __( 'Шаблоны не применены: они затрагивают тему, jQuery, ядро WordPress или накрывают несколько файлов. Подробности — в «Последнем действии».', 'modern-minify' ),
 			'advice-rolled-back' => __( 'Настройки отменены: после применения страница теряет jQuery. Шаблон слишком широкий.', 'modern-minify' ),
 			'webp-deleted' => __( 'Сгенерированные WebP удалены.', 'modern-minify' ),
+			'webp-rebuilt' => __( 'Пересборка выполнена, кеш страницы обновится при следующем запросе.', 'modern-minify' ),
 			'css-action'  => __( 'Действие применено, кеш сброшен.', 'modern-minify' ),
 			'css-action-blocked' => __( 'Асинхронная загрузка отклонена: это стиль темы или ядра — страница осталась бы без оформления.', 'modern-minify' ),
 			'avatars'     => __( 'Аватары обработаны.', 'modern-minify' ),
@@ -1583,6 +1585,32 @@ final class MMF_Admin {
 
 	/**
 	 * Deletes every generated WebP sidecar, a reversible off switch.
+	 */
+	/**
+	 * Handles the manual rebuild: converts up to forty images right now.
+	 */
+	public static function handle_rebuild_webp(): void {
+		if ( ! isset( $_GET['action'] ) || 'mmf_rebuild_webp' !== sanitize_key( (string) wp_unslash( $_GET['action'] ) ) ) {
+			return;
+		}
+
+		if ( ! current_user_can( self::CAPABILITY ) ) {
+			wp_die( esc_html__( 'Недостаточно прав.', 'modern-minify' ) );
+		}
+
+		check_admin_referer( self::WEBP_NONCE );
+
+		update_option( 'mmf_rebuild_sidecars', '1', false );
+		$done = MMF_Images::rebuild_sidecars();
+
+		MMF_Stats::record_action( sprintf( /* translators: %d: files converted. */ __( 'Пересборка WebP: обработано файлов — %d.', 'modern-minify' ), (int) $done ) );
+
+		wp_safe_redirect( add_query_arg( array( 'page' => self::PAGE, 'tab' => 'images', 'mmf-toast' => 'webp-rebuilt', 'mmf-toast-nonce' => wp_create_nonce( self::TOAST_NONCE ) ), admin_url( 'options-general.php' ) ) );
+		exit;
+	}
+
+	/**
+	 * Handles the full delete of the generated copies.
 	 */
 	public static function handle_delete_webp(): void {
 		if ( ! isset( $_GET['action'] ) || 'mmf_delete_webp' !== sanitize_key( (string) wp_unslash( $_GET['action'] ) ) ) {
@@ -2720,6 +2748,11 @@ final class MMF_Admin {
 			self::WEBP_NONCE
 		);
 
+		printf(
+			'<a class="button button-primary mmf-rebuild-webp" href="%s">%s</a> ',
+			esc_url( wp_nonce_url( add_query_arg( array( 'page' => self::PAGE, 'action' => 'mmf_rebuild_webp' ), admin_url( 'options-general.php' ) ), self::WEBP_NONCE ) ),
+			esc_html__( 'Пересобрать WebP сейчас', 'modern-minify' )
+		);
 		echo '<p class="mmf-actions"><a class="button mmf-delete-webp" href="' . esc_url( $webp_url ) . '">' . esc_html__( 'Удалить все созданные WebP', 'modern-minify' ) . '</a></p>';
 	}
 
