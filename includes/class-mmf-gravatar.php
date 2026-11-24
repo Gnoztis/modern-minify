@@ -1,16 +1,25 @@
 <?php
 /**
- * Local avatar instead of Gravatar.
+ * No Gravatar requests: a local placeholder, without choosing whose avatar wins.
  *
  * A gravatar URL sends the visitor's IP address and a hash of their e-mail to a
- * third-party server on every page that shows an avatar. The replacement is an
- * inline SVG data URI: no request, no third party, and nothing to configure.
+ * third-party server on every page that shows an avatar. The goal is only to
+ * stop that request, not to override an avatar somebody else already chose:
+ * another plugin may point `get_avatar_data()` at an uploaded file, and that
+ * decision is none of our business.
  *
- * Three filters are covered because themes get an avatar in three ways:
- * `pre_get_avatar_data` (what `get_avatar()` and `get_avatar_url()` both go
- * through), `get_avatar` (the final markup) and `get_avatar_url` (a theme that
- * builds the URL itself). The admin screens and cron are left alone: the
- * plugin's own diagnostics and outgoing mail keep whatever WordPress does.
+ * So the two filters are narrow and late:
+ *
+ *   - `pre_get_avatar_data` (priority 99) acts only when the URL is empty or is
+ *     a gravatar URL; a local file, an uploads path, a data URI or a URL of
+ *     this site is returned untouched;
+ *   - `get_avatar_url` (priority 99) rewrites only gravatar hosts, including
+ *     the `*.wp.com` proxy with an `/avatar/` path;
+ *   - `get_avatar` is not filtered at all: replacing the final markup is the
+ *     blunt instrument that used to hide an avatar another plugin had set.
+ *
+ * The admin screens and cron are left alone: the plugin's own diagnostics and
+ * outgoing mail keep whatever WordPress does.
  *
  * @package ModernMinify
  */
@@ -24,7 +33,7 @@ if ( class_exists( 'MMF_Gravatar' ) ) {
 }
 
 /**
- * Replaces Gravatar with an inline SVG.
+ * Replaces Gravatar requests with an inline SVG.
  */
 final class MMF_Gravatar {
 
@@ -39,12 +48,12 @@ final class MMF_Gravatar {
 	private static string $uri = '';
 
 	/**
-	 * Registers the filters.
+	 * Registers the filters after other avatar providers.
 	 */
 	public static function register_hooks(): void {
-		add_filter( 'pre_get_avatar_data', array( __CLASS__, 'filter_data' ), 10, 2 );
-		add_filter( 'get_avatar', array( __CLASS__, 'filter_avatar' ), 10, 5 );
-		add_filter( 'get_avatar_url', array( __CLASS__, 'filter_url' ), 10, 3 );
+		// Priority 99: a plugin that sets its own avatar at 10 keeps it.
+		add_filter( 'pre_get_avatar_data', array( __CLASS__, 'filter_data' ), 99, 2 );
+		add_filter( 'get_avatar_url', array( __CLASS__, 'filter_url' ), 99, 3 );
 	}
 
 	/**
@@ -62,7 +71,7 @@ final class MMF_Gravatar {
 	}
 
 	/**
-	 * Short-circuits `get_avatar_data()`.
+	 * Replaces an empty or gravatar URL, and nothing else.
 	 *
 	 * @param mixed $args        Avatar arguments.
 	 * @param mixed $id_or_email User identifier.
@@ -70,6 +79,14 @@ final class MMF_Gravatar {
 	 */
 	public static function filter_data( $args, $id_or_email ) {
 		if ( ! self::active() || ! is_array( $args ) ) {
+			return $args;
+		}
+
+		$url = isset( $args['url'] ) && is_string( $args['url'] ) ? trim( $args['url'] ) : '';
+
+		// Another plugin already chose an avatar: local upload, data URI, our
+		// own domain - anything that is not a gravatar stays as it is.
+		if ( '' !== $url && ! self::is_gravatar_url( $url ) ) {
 			return $args;
 		}
 
@@ -82,47 +99,53 @@ final class MMF_Gravatar {
 	}
 
 	/**
-	 * Replaces the `<img>` markup.
-	 *
-	 * @param mixed  $avatar      Original markup.
-	 * @param mixed  $id_or_email User identifier.
-	 * @param mixed  $size        Requested size.
-	 * @param mixed  $default     Default argument, unused.
-	 * @param mixed  $alt         Alt text.
-	 * @return string
-	 */
-	public static function filter_avatar( $avatar, $id_or_email, $size = 96, $default = '', $alt = '' ) {
-		if ( ! self::active() ) {
-			return $avatar;
-		}
-
-		$size = is_numeric( $size ) ? max( 1, (int) $size ) : 96;
-		$alt  = is_string( $alt ) ? $alt : '';
-
-		return sprintf(
-			'<img alt="%s" src="%s" class="avatar avatar-%d photo" height="%d" width="%d" />',
-			esc_attr( $alt ),
-			esc_url( self::uri() ),
-			$size,
-			$size,
-			$size
-		);
-	}
-
-	/**
-	 * Replaces a URL a theme asked for directly.
+	 * Rewrites a URL a theme asked for directly, gravatar hosts only.
 	 *
 	 * @param mixed $url         Original URL.
 	 * @param mixed $id_or_email User identifier.
 	 * @param mixed $args        Avatar arguments.
-	 * @return string
+	 * @return mixed
 	 */
 	public static function filter_url( $url, $id_or_email, $args = array() ) {
-		if ( ! self::active() ) {
+		if ( ! self::active() || ! is_string( $url ) ) {
+			return $url;
+		}
+
+		if ( ! self::is_gravatar_url( $url ) ) {
 			return $url;
 		}
 
 		return self::uri();
+	}
+
+	/**
+	 * Whether a URL points at a Gravatar avatar.
+	 *
+	 * Covers `gravatar.com` and its subdomains and the `*.wp.com` image proxy,
+	 * but only on an `/avatar/` path - a non-avatar image on those hosts is not
+	 * ours to rewrite.
+	 *
+	 * @param string $url Avatar URL.
+	 */
+	public static function is_gravatar_url( string $url ): bool {
+		$parts = wp_parse_url( $url );
+
+		if ( ! is_array( $parts ) || empty( $parts['host'] ) ) {
+			return false;
+		}
+
+		$host = strtolower( (string) $parts['host'] );
+		$path = strtolower( (string) ( $parts['path'] ?? '' ) );
+
+		if ( ! str_contains( $path, '/avatar/' ) ) {
+			return false;
+		}
+
+		if ( 'gravatar.com' === $host || str_ends_with( $host, '.gravatar.com' ) ) {
+			return true;
+		}
+
+		return str_ends_with( $host, '.wp.com' );
 	}
 
 	/**

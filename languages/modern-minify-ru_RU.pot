@@ -9,9 +9,9 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Modern Minify 0.6.7\n"
+"Project-Id-Version: Modern Minify 0.6.8\n"
 "Report-Msgid-Bugs-To: https://github.com/Gnoztis/modern-minify/issues\n"
-"POT-Creation-Date: 2026-11-24T10:50:42+00:00\n"
+"POT-Creation-Date: 2026-11-24T11:38:38+00:00\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -425,11 +425,11 @@ msgid "Локально — скачать в кеш и отдавать со с
 msgstr ""
 
 #: includes/class-mmf-admin.php:576
-msgid "Заменять граватары локальной заглушкой"
+msgid "Не загружать граватары (локальная заглушка)"
 msgstr ""
 
 #: includes/class-mmf-admin.php:577
-msgid "Аватары заменяются локальной заглушкой, письма и админка не затрагиваются."
+msgid "Граватары заменяются локальной заглушкой; аватары, заданные другим плагином (загруженный файл, uploads, data URI, свой домен), не затрагиваются. Админка и письма не меняются."
 msgstr ""
 
 #: includes/class-mmf-admin.php:580
