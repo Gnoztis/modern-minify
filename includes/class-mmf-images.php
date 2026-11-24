@@ -955,17 +955,13 @@ final class MMF_Images {
 	 * @return int Files converted in this run.
 	 */
 	public static function rebuild_sidecars(): int {
-		if ( ! (bool) get_option( 'mmf_rebuild_sidecars', false ) ) {
-			return 0;
-		}
-
 		$ids = get_posts(
 			array(
 				'post_type'      => 'attachment',
 				'post_status'    => 'inherit',
 				'post_mime_type' => array( 'image/jpeg', 'image/png' ),
 				'fields'         => 'ids',
-				'posts_per_page' => 100,
+				'posts_per_page' => 200,
 				'no_found_rows'  => true,
 			)
 		);
