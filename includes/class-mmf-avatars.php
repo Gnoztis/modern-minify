@@ -237,6 +237,7 @@ final class MMF_Avatars {
 		$webp = $photo . '.webp' . ( '' !== $query ? '?' . $query : '' );
 
 		MMF_Stats::increment( 'avatar_sidecar' );
+		delete_transient( 'mmf_avatar_file_stats' );
 		self::$converted++;
 		self::$saved += max( 0, (int) filesize( $file ) - (int) filesize( $sidecar ) );
 		$known = (array) get_option( 'mmf_avatar_paths', array() );

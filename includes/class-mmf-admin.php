@@ -1579,6 +1579,7 @@ final class MMF_Admin {
 		check_admin_referer( self::WEBP_NONCE );
 
 		$deleted = MMF_Images::delete_all();
+		delete_transient( 'mmf_avatar_file_stats' );
 		MMF_Stats::record_action( sprintf( __( 'Удалено WebP-файлов: %d.', 'modern-minify' ), (int) $deleted ) );
 
 		wp_safe_redirect(
@@ -2522,6 +2523,56 @@ final class MMF_Admin {
 	/**
 	 * The whole "Изображения" tab below the fields.
 	 */
+	/**
+	 * Unique avatar files on the site, with and without a WebP copy.
+	 *
+	 * The screen used to show a render counter under the label "аватаров
+	 * найдено": 25 819 avatars on a site with a dozen users. These numbers
+	 * describe files, and a short transient keeps the scan off the hot path.
+	 *
+	 * @return array{total:int,with_copy:int,without:int}
+	 */
+	private static function avatar_file_stats(): array {
+		$cached = get_transient( 'mmf_avatar_file_stats' );
+
+		if ( is_array( $cached ) && isset( $cached['total'], $cached['with_copy'], $cached['without'] ) ) {
+			return array( 'total' => (int) $cached['total'], 'with_copy' => (int) $cached['with_copy'], 'without' => (int) $cached['without'] );
+		}
+
+		$users = function_exists( 'get_users' ) ? get_users( array( 'fields' => 'ID', 'number' => 2000 ) ) : array();
+		$files = array();
+
+		foreach ( (array) $users as $user_id ) {
+			$url = function_exists( 'get_avatar_url' ) ? get_avatar_url( (int) $user_id, array( 'size' => 96 ) ) : '';
+
+			if ( ! is_string( $url ) || '' === $url || str_starts_with( $url, 'data:' ) ) {
+				continue;
+			}
+
+			$path = (string) wp_parse_url( $url, PHP_URL_PATH );
+			$ext  = strtolower( (string) pathinfo( $path, PATHINFO_EXTENSION ) );
+
+			if ( ! in_array( $ext, array( 'jpg', 'jpeg', 'png' ), true ) ) {
+				continue;
+			}
+
+			$file = MMF_Assets::resolve_path( $url, $ext );
+
+			if ( '' === $file || ! is_file( $file ) ) {
+				continue;
+			}
+
+			$files[ $file ] = is_file( $file . '.webp' );
+		}
+
+		$with = count( array_filter( $files ) );
+		$out  = array( 'total' => count( $files ), 'with_copy' => $with, 'without' => count( $files ) - $with );
+
+		set_transient( 'mmf_avatar_file_stats', $out, 10 * MINUTE_IN_SECONDS );
+
+		return $out;
+	}
+
 	private static function render_images_tab(): void {
 		$stats  = MMF_Stats::all();
 		$method = MMF_Images::method();
@@ -2588,11 +2639,15 @@ final class MMF_Admin {
 			echo '<p class="mmf-alert mmf-alert--error" role="alert">' . esc_html__( 'PHP на сайте исполняется редко (кеш страниц) — запустите массовую конвертацию.', 'modern-minify' ) . '</p>';
 		}
 
+		$avatars = self::avatar_file_stats();
+
 		self::status_group(
 			__( 'Почему не WebP', 'modern-minify' ),
 			array(
-				__( 'Аватаров найдено', 'modern-minify' )        => (string) (int) $stats['avatar_found'],
-				__( 'Аватаров с копией', 'modern-minify' )       => (string) (int) $stats['avatar_sidecar'],
+				__( 'Аватаров на сайте', 'modern-minify' )       => (string) (int) $avatars['total'],
+				__( 'С копией WebP', 'modern-minify' )           => (string) (int) $avatars['with_copy'],
+				__( 'Без копии', 'modern-minify' )               => (string) (int) $avatars['without'],
+				__( 'Показов аватаров', 'modern-minify' )        => (string) (int) $stats['avatar_found'],
 				__( 'Нет поддержки WebP в PHP', 'modern-minify' ) => (string) (int) $stats['avatar_fail_support'],
 				__( 'Не JPEG/PNG', 'modern-minify' )             => (string) (int) $stats['avatar_fail_type'],
 				__( 'Ошибка записи', 'modern-minify' )           => (string) (int) $stats['avatar_fail_write'],
