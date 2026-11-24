@@ -307,7 +307,7 @@ final class MMF_Config {
 			),
 			'avatar_quality'         => array(
 				'type'    => 'int',
-				'default' => 82,
+				'default' => 75,
 				'min'     => 60,
 				'max'     => 95,
 			),
@@ -317,13 +317,13 @@ final class MMF_Config {
 			),
 			'image_quality_jpeg'     => array(
 				'type'    => 'int',
-				'default' => 82,
+				'default' => 75,
 				'min'     => 60,
 				'max'     => 95,
 			),
 			'image_quality_png'      => array(
 				'type'    => 'int',
-				'default' => 82,
+				'default' => 75,
 				'min'     => 60,
 				'max'     => 95,
 			),
@@ -440,6 +440,19 @@ final class MMF_Config {
 	 */
 	public static function update( array $settings ): bool {
 		$current = self::all();
+
+		// A different quality means every generated WebP is stale: the sidecar
+		// names do not carry the quality, so they must be deleted or they will be
+		// served forever at the old setting.
+		$quality_keys = array( 'image_quality_jpeg', 'image_quality_png', 'avatar_quality', 'image_png_lossless' );
+		$regenerate   = false;
+
+		foreach ( $quality_keys as $quality_key ) {
+			if ( array_key_exists( $quality_key, $settings ) && (string) ( $settings[ $quality_key ] ?? '' ) !== (string) ( $current[ $quality_key ] ?? '' ) ) {
+				$regenerate = true;
+			}
+		}
+
 		$clean   = self::prepare( array_merge( $current, $settings ) );
 
 		if ( $clean === $current || $clean === get_option( self::OPTION ) ) {
@@ -452,6 +465,10 @@ final class MMF_Config {
 
 		if ( $saved ) {
 			self::$cache = $clean;
+		}
+
+		if ( $saved && $regenerate && class_exists( 'MMF_Images' ) ) {
+			MMF_Images::delete_all();
 		}
 
 		return $saved;

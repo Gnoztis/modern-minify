@@ -2814,9 +2814,21 @@ final class MMF_Admin {
 
 		echo '</tbody></table></div>';
 
+		// The button is enabled when at least one row carries a checkbox, which
+		// includes risky plugin scripts the owner may deliberately defer.
+		$pickable = 0;
+
+		foreach ( $analysis['items'] as $pick_row ) {
+			$pick_reason = (string) ( $pick_row['reason'] ?? '' );
+
+			if ( MMF_Advisor::CAN === $pick_row['verdict'] || ( MMF_Advisor::RISKY === $pick_row['verdict'] && in_array( $pick_reason, array( 'local', 'inline-after' ), true ) ) ) {
+				$pickable++;
+			}
+		}
+
 		echo '<p class="mmf-advisor__actions">';
 		echo '<select name="mmf_advice_mode"><option value="delay">' . esc_html__( 'Delay JS', 'modern-minify' ) . '</option><option value="defer">' . esc_html__( 'Не откладывать (defer_skip)', 'modern-minify' ) . '</option></select> ';
-		echo '<button type="submit" class="button button-primary" name="mmf_apply_advice" value="1" formaction="' . esc_url( admin_url( 'admin-post.php?action=mmf_apply_advice' ) ) . '"' . ( 0 === (int) $analysis['deferable'] ? ' disabled="disabled"' : '' ) . '>' . esc_html__( 'Отсрочить выбранные', 'modern-minify' ) . '</button>';
+		echo '<button type="submit" class="button button-primary" name="mmf_apply_advice" value="1" formaction="' . esc_url( admin_url( 'admin-post.php?action=mmf_apply_advice' ) ) . '"' . ( 0 === $pickable ? ' disabled="disabled"' : '' ) . '>' . esc_html__( 'Отсрочить выбранные', 'modern-minify' ) . '</button>';
 		echo '<input type="hidden" name="mmf_advice_nonce" value="' . esc_attr( wp_create_nonce( self::ADVICE_NONCE ) ) . '" />';
 		echo '</p>';
 		echo '<p class="description">' . esc_html__( 'Настройки не меняются, пока вы не нажмёте кнопку. Будут добавлены только отмеченные шаблоны.', 'modern-minify' ) . '</p>';

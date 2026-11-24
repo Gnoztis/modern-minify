@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Modern Minify
  * Description:       Минификация CSS, JS и HTML, асинхронная загрузка файлов и обработка Google Fonts.
- * Version:           0.8.13
+ * Version:           0.8.14
  * Requires at least: 7.0
  * Tested up to:      7.1
  * Requires PHP:      8.0
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'MMF_VERSION', '0.8.13' );
+define( 'MMF_VERSION', '0.8.14' );
 
 /**
  * Cache-signature version of the minifiers.
@@ -79,6 +79,36 @@ function mmf_bootstrap(): void {
 	}
 }
 add_action( 'plugins_loaded', 'mmf_bootstrap' );
+
+/**
+ * One-time move of the WebP quality defaults from 82 to 75.
+ *
+ * 82 was chosen blind; PageSpeed measured real headroom (11.2 -> 4.7 KiB on an
+ * avatar, 174.9 -> 127.3 KiB on a post image) at a quality nobody can tell
+ * apart. Sites that never touched the value get the new default; an explicit
+ * choice is left alone.
+ */
+function mmf_migrate_quality_defaults(): void {
+	if ( '2' === (string) get_option( 'mmf_quality_migrated' ) ) {
+		return;
+	}
+
+	$current = MMF_Config::all();
+	$changed = array();
+
+	foreach ( array( 'image_quality_jpeg', 'image_quality_png', 'avatar_quality' ) as $key ) {
+		if ( 82 === (int) ( $current[ $key ] ?? 0 ) ) {
+			$changed[ $key ] = 75;
+		}
+	}
+
+	if ( array() !== $changed ) {
+		MMF_Config::update( $changed );
+	}
+
+	update_option( 'mmf_quality_migrated', '2', false );
+}
+add_action( 'admin_init', 'mmf_migrate_quality_defaults' );
 
 /**
  * Loads the translations shipped in `languages/`.
