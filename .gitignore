@@ -1,0 +1,19 @@
+# Tools and tests live outside the plugin repository
+tools/
+tests/
+node_modules/
+vendor/
+
+# Local secrets
+.env
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Archives and logs
+*.zip
+*.tar.gz
+*.log
