@@ -1547,7 +1547,7 @@ final class MMF_Admin {
 
 		echo '<div class="notice notice-warning inline"><p>' . esc_html( MMF_Notices::rocket_warning() ) . '</p></div>';
 
-		$js = MMF_Loader::script( MMF_Loader::MODE_DOMREADY, 5000, MMF_Loader::MAX_BYTES_ROCKET );
+		$js = MMF_Loader::script( MMF_Loader::MODE_DOMREADY, 3000, MMF_Loader::MAX_BYTES_ROCKET );
 
 		if ( MMF_Loader::csp_blocked( $js ) ) {
 			printf(

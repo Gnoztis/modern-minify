@@ -135,11 +135,15 @@ final class MMF_Loader {
 				. 'if(u){s.src=u}else{s.textContent=e.textContent||""}'
 				. 'e.parentNode.replaceChild(s,e)}}';
 
-		$trigger = $rocket
-			? 'if("loading"===d.readyState){d.addEventListener("DOMContentLoaded",R,{once:!0})}else{R()}'
-			: 'function T(){setTimeout(R,' . $timeout . ')}'
-				. 'function S(){T();[' . $events . '].forEach(function(t){w.addEventListener(t,R,{once:!0,passive:!0})})}'
-				. 'if("loading"===d.readyState){d.addEventListener("DOMContentLoaded",S,{once:!0})}else{S()}';
+		// Both modes now wait for the visitor or for a short timeout. Rocket used
+		// to fire only on DOMContentLoaded, which is the same as not deferring at
+		// all: the owner asked for it to actually help, so it gets the same event
+		// set as Delay JS plus an idle prewarm that warms the queue while the
+		// browser is busy doing nothing.
+		$trigger = 'function T(){setTimeout(R,' . $timeout . ')}'
+			. 'function S(){T();[' . $events . '].forEach(function(t){w.addEventListener(t,R,{once:!0,passive:!0})})}'
+			. ( $rocket ? 'function I(){if(w.requestIdleCallback){w.requestIdleCallback(function(){setTimeout(R,2000)},{timeout:4000})}}' : '' )
+			. 'if("loading"===d.readyState){d.addEventListener("DOMContentLoaded",function(){S();' . ( $rocket ? 'I();' : '' ) . '},{once:!0})}else{S();' . ( $rocket ? 'I();' : '' ) . '}';
 
 		$js = '(function(){var w=window,d=document,n=null,c=navigator.connection;'
 			. 'if(w.mmfL)return;w.mmfL=1;'

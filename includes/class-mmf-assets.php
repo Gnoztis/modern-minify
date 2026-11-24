@@ -101,7 +101,7 @@ final class MMF_Assets {
 		$rocket_js = '';
 
 		if ( ! empty( $settings['rocket_mode'] ) ) {
-			$rocket_js = MMF_Loader::script( MMF_Loader::MODE_DOMREADY, 5000, MMF_Loader::MAX_BYTES_ROCKET );
+			$rocket_js = MMF_Loader::script( MMF_Loader::MODE_DOMREADY, 3000, MMF_Loader::MAX_BYTES_ROCKET );
 
 			if ( '' !== $rocket_js && MMF_Loader::csp_blocked( $rocket_js ) ) {
 				$rocket_js = '';
