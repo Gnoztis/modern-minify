@@ -949,9 +949,16 @@ final class MMF_Images {
 		$done = 0;
 
 		if ( array() !== $jobs ) {
-			$chunk = array_splice( $jobs, 0, 10 );
+			$batch = min( 30, max( 10, (int) ceil( count( $jobs ) / 4 ) ) );
+			$chunk = array_splice( $jobs, 0, $batch );
+			$start = microtime( true );
 
 			foreach ( $chunk as $file ) {
+				if ( ( microtime( true ) - $start ) > 8 ) {
+					$jobs[] = $file;
+					continue;
+				}
+
 				if ( is_string( $file ) && is_file( $file ) && ! self::usable_sidecar( $file ) ) {
 					self::convert_file( $file );
 					$done++;
@@ -966,7 +973,13 @@ final class MMF_Images {
 		} else {
 			$ids = get_posts( array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'post_mime_type' => array( 'image/jpeg', 'image/png' ), 'fields' => 'ids', 'posts_per_page' => 10, 'no_found_rows' => true ) );
 
+			$scan_start = microtime( true );
+
 			foreach ( (array) $ids as $id ) {
+				if ( ( microtime( true ) - $scan_start ) > 8 ) {
+					break;
+				}
+
 				if ( self::needs_sidecar( (int) $id ) ) {
 					self::convert_attachment( (int) $id );
 					$done++;

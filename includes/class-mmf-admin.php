@@ -1774,7 +1774,11 @@ final class MMF_Admin {
 		$chunk = array_splice( $state['ids'], 0, self::BULK_BATCH );
 
 		foreach ( $chunk as $id ) {
-			$counters = MMF_Images::convert_attachment( (int) $id );
+			try {
+				$counters = MMF_Images::convert_attachment( (int) $id );
+			} catch ( \Throwable $error ) {
+				throw new \RuntimeException( 'attachment ' . (int) $id . ': ' . $error->getMessage(), 0, $error );
+			}
 
 			foreach ( $counters as $key => $value ) {
 				if ( isset( $state['stats'][ $key ] ) ) {
@@ -1901,7 +1905,9 @@ final class MMF_Admin {
 
 		$pair = $map[ $code ] ?? array( __( 'Не удалось выполнить пакет.', 'modern-minify' ), __( 'Попробуйте ещё раз.', 'modern-minify' ) );
 
-		return array( 'error' => $code, 'message' => $pair[0], 'hint' => $pair[1], 'detail' => $detail );
+		$message = '' !== $detail ? $pair[0] . ' (' . $detail . ')' : $pair[0];
+
+		return array( 'error' => $code, 'message' => $message, 'hint' => $pair[1], 'detail' => $detail );
 	}
 
 	/**
@@ -2766,33 +2772,61 @@ if(bulk){
   var bulkPause=document.getElementById("mmf-webp-pause");
   var bulkResume=document.getElementById("mmf-webp-resume");
   var bulkStop=document.getElementById("mmf-webp-stop");
-  var bulkBusy=false,bulkTimer=0;
-  function num(value){return Number(value??0)||0;}
-  function bulkPost(action){
-    var body=new URLSearchParams();
-    body.set("action",action);
-    body.set("nonce",bulkNonce);
-    return fetch(window.ajaxurl,{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8"},body:body.toString()}).then(function(response){return response.json();});
-  }
-  function bulkToast(text){
+  var bulkBusy=false,bulkTimer=0,bulkFailures=0,bulkLastAction="mmf_webp_batch";
+  function bulkNum(value){return Number(value??0)||0;}
+  function bulkToast(text,type,details){
     var wrap=document.querySelector(".mmf-wrap");
     if(!wrap){return}
     var el=document.createElement("div");
-    el.className="mmf-toast mmf-toast--success";
-    el.setAttribute("role","status");
-    el.textContent=text;
-    wrap.insertBefore(el,wrap.firstChild);
-    window.setTimeout(function(){if(el.parentNode){el.parentNode.removeChild(el);}},10000);
+    el.className="mmf-toast "+(type==="error"?"mmf-toast--error":"mmf-toast--success");
+    el.setAttribute("role",type==="error"?"alert":"status");
+    var body=document.createElement("div");
+    var title=document.createElement("strong");title.textContent=text;body.appendChild(title);
+    if(details&&details.hint){var hint=document.createElement("p");hint.className="description";hint.textContent=details.hint;body.appendChild(hint);}
+    if(details&&details.debug){var det=document.createElement("details");var sum=document.createElement("summary");sum.textContent="Подробности";det.appendChild(sum);var pre=document.createElement("pre");pre.style.whiteSpace="pre-wrap";pre.style.maxHeight="160px";pre.style.overflow="auto";pre.textContent=details.debug;det.appendChild(pre);body.appendChild(det);}
+    el.appendChild(body);wrap.insertBefore(el,wrap.firstChild);
+    window.setTimeout(function(){if(el.parentNode){el.parentNode.removeChild(el);}},type==="error"?15000:10000);
+  }
+  function bulkDetails(action,res){
+    return "action: "+action+"\nstatus: "+(res.status||0)+"\ntime: "+new Date().toISOString()+"\nresponse: "+String(res.raw||res.error||"").slice(0,300);
+  }
+  function bulkRequest(action,retried){
+    bulkLastAction=action;
+    var controller=typeof AbortController!=="undefined"?new AbortController():null;
+    var timer=window.setTimeout(function(){if(controller){controller.abort();}},60000);
+    var body=new URLSearchParams();body.set("action",action);body.set("nonce",bulkNonce);
+    return fetch(window.ajaxurl,{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8"},body:body.toString(),signal:controller?controller.signal:undefined}).then(function(response){
+      return response.text().then(function(text){return {status:response.status,raw:text};});
+    }).then(function(result){
+      window.clearTimeout(timer);
+      var data=null;
+      try{data=JSON.parse(result.raw);}catch(e){}
+      var code=data&&data.data&&data.data.code?data.data.code:"";
+      if(!retried&&(result.status===403||code==="nonce_expired")){return bulkRequest(action,true);}
+      return {ok:!!(data&&data.success),status:result.status,data:data&&data.data,raw:result.raw,error:""};
+    }).catch(function(error){
+      window.clearTimeout(timer);
+      return {ok:false,status:0,data:null,raw:"",error:error&&error.name==="AbortError"?"timeout":"network"};
+    });
+  }
+  function bulkFail(res,action){
+    bulkFailures++;
+    var message="Не удалось выполнить пакет.";
+    var hint="Попробуйте ещё раз.";
+    if(res.error==="timeout"){message="Сервер не ответил за 60 секунд.";hint="Уменьшите пакет или повторите позже.";}
+    else if(res.data&&res.data.message){message=res.data.message;hint=res.data.hint||hint;if(res.data.code==="nonce_expired"||res.status===403){hint="Обновите страницу — истёк токен.";}}
+    else if(res.status===500){message="ошибка сервера 500";hint="Смотрите журнал ошибок PHP.";}
+    else if(res.status===0){message="Нет связи с сервером.";hint="Проверьте сеть и повторите.";}
+    bulkToast(message,"error",{hint:hint,debug:bulkDetails(action,res)});
+    if(bulkFailures>=3){bulkBusy=false;if(bulkTimer){window.clearTimeout(bulkTimer);}bulkToast("остановлено после 3 ошибок подряд","error",{hint:"Исправьте причину и запустите снова."});}
+    return bulkFailures<3;
   }
   function bulkPaint(state){
     if(!state){return}
-    var total=num(state.total),done=num(state.done);
+    var total=bulkNum(state.total),done=bulkNum(state.done);
     if(bulkProgressBar&&bulkBar){var percent=total?Math.round(done/total*100):0;if(total>0){bulkProgressBar.hidden=false;}bulkBar.style.width=percent+"%";bulkProgressBar.setAttribute("aria-valuenow",String(percent));}
     if(bulkProgress){bulkProgress.textContent=total>0?("обработано "+done+" из "+total):"ещё не запускалось";}
-    if(bulkCounts&&state.stats){
-      var s=state.stats;
-      bulkCounts.innerHTML="<span class=\"mmf-chip\">создано "+num(s.created)+"</span> <span class=\"mmf-chip\">пересоздано "+num(s.recreated)+"</span> <span class=\"mmf-chip\">уже был "+num(s.reused)+"</span> <span class=\"mmf-chip\">маленьких "+num(s.small)+"</span> <span class=\"mmf-chip\">ошибок "+num(s.error)+"</span>";
-    }
+    if(bulkCounts&&state.stats){var s=state.stats;bulkCounts.innerHTML='<span class="mmf-chip">создано '+bulkNum(s.created)+'</span> <span class="mmf-chip">пересоздано '+bulkNum(s.recreated)+'</span> <span class="mmf-chip">уже был '+bulkNum(s.reused)+'</span> <span class="mmf-chip">маленьких '+bulkNum(s.small)+'</span> <span class="mmf-chip">ошибок '+bulkNum(s.error)+'</span>';}
     if(bulkStart){bulkStart.hidden=total>0&&done<total;bulkStart.disabled=total>0&&done<total;}
     if(bulkPause){bulkPause.hidden=!(total>0&&done<total&&!state.paused);}
     if(bulkResume){bulkResume.hidden=!(state.paused&&total>0&&done<total);}
@@ -2801,23 +2835,21 @@ if(bulk){
   function bulkRun(){
     if(bulkBusy){return}
     bulkBusy=true;
-    bulkPost("mmf_webp_batch").then(function(response){
+    bulkRequest("mmf_webp_batch",false).then(function(res){
       bulkBusy=false;
-      if(!response||!response.success){bulkToast("Не удалось выполнить пакет. Попробуйте ещё раз.");return}
-      var state=response.data;
-      bulkPaint(state);
-      if(state.finished){if(bulkProgressBar&&bulkBar){bulkBar.style.width="100%";bulkProgressBar.setAttribute("aria-valuenow","100");window.setTimeout(function(){bulkProgressBar.hidden=true;},3000);}bulkToast("Готово: обработано "+state.total+" изображений. Рекомендуется сбросить кеш.");return}
+      if(!res.ok){if(!bulkFail(res,"mmf_webp_batch")){return}bulkTimer=window.setTimeout(bulkRun,1500);return;}
+      bulkFailures=0;var state=res.data;bulkPaint(state);
+      if(state.finished){if(bulkProgressBar&&bulkBar){bulkBar.style.width="100%";bulkProgressBar.setAttribute("aria-valuenow","100");window.setTimeout(function(){bulkProgressBar.hidden=true;},3000);}bulkToast("Готово: обработано "+bulkNum(state.total)+" изображений. Рекомендуется сбросить кеш.","success");return;}
       if(state.paused){return}
       bulkTimer=window.setTimeout(bulkRun,60);
     });
   }
-  if(bulkStart){bulkStart.addEventListener("click",function(){bulkPost("mmf_webp_start").then(function(response){if(!response||!response.success){bulkToast("Уже идёт конвертация или запуск недоступен.");return}bulkPaint(response.data);if(parseInt(response.data.total||0,10)===0){bulkToast("Новых изображений нет.");return}bulkRun();});});}
-  if(bulkPause){bulkPause.addEventListener("click",function(){if(bulkTimer){window.clearTimeout(bulkTimer);}bulkPost("mmf_webp_pause").then(function(response){if(response&&response.success){bulkPaint(response.data);}});});}
-  if(bulkResume){bulkResume.addEventListener("click",function(){bulkPost("mmf_webp_resume").then(function(response){if(response&&response.success){bulkPaint(response.data);bulkRun();}});});}
-  if(bulkStop){bulkStop.addEventListener("click",function(){if(bulkTimer){window.clearTimeout(bulkTimer);}bulkBusy=false;if(bulkProgressBar){bulkProgressBar.hidden=true;if(bulkBar){bulkBar.style.width="0%";}bulkProgressBar.setAttribute("aria-valuenow","0");}bulkPost("mmf_webp_stop").then(function(){bulkPaint({ids:[],total:0,done:0,stats:{}});});});}
-  bulkPost("mmf_webp_status").then(function(response){if(response&&response.success){bulkPaint(response.data);if(parseInt(response.data.total||0,10)>parseInt(response.data.done||0,10)&&!response.data.paused){bulkRun();}}});
-}
-var links=document.querySelectorAll(".mmf-reset");
+  if(bulkStart){bulkStart.addEventListener("click",function(){bulkFailures=0;bulkRequest("mmf_webp_start",false).then(function(res){if(!res.ok){bulkFail(res,"mmf_webp_start");return;}bulkPaint(res.data);if(bulkNum(res.data.total)===0){bulkToast("Новых изображений нет.","success");return;}bulkRun();});});}
+  if(bulkPause){bulkPause.addEventListener("click",function(){if(bulkTimer){window.clearTimeout(bulkTimer);}bulkRequest("mmf_webp_pause",false).then(function(res){if(res.ok){bulkPaint(res.data);}});});}
+  if(bulkResume){bulkResume.addEventListener("click",function(){bulkFailures=0;bulkRequest("mmf_webp_resume",false).then(function(res){if(res.ok){bulkPaint(res.data);bulkRun();}});});}
+  if(bulkStop){bulkStop.addEventListener("click",function(){if(bulkTimer){window.clearTimeout(bulkTimer);}bulkBusy=false;if(bulkProgressBar){bulkProgressBar.hidden=true;if(bulkBar){bulkBar.style.width="0%";}bulkProgressBar.setAttribute("aria-valuenow","0");}bulkRequest("mmf_webp_stop",false).then(function(){bulkPaint({ids:[],total:0,done:0,stats:{}});});});}
+  bulkRequest("mmf_webp_status",false).then(function(res){if(res.ok){bulkPaint(res.data);if(bulkNum(res.data.total)>bulkNum(res.data.done)&&!res.data.paused){bulkRun();}}});
+}var links=document.querySelectorAll(".mmf-reset");
 for(var j=0;j<links.length;j++){links[j].addEventListener("click",function(event){if(!window.confirm(__MMF_RESET_PROMPT__)){event.preventDefault();}});}
 var addRow=document.querySelector(".mmf-exclude-add"),tpl=document.getElementById("mmf-exclude-template"),rowsBox=document.getElementById("mmf-exclude-rows");
 if(addRow&&tpl&&rowsBox){addRow.addEventListener("click",function(){var clone=tpl.content.cloneNode(true),field=clone.querySelector("input");if(field){field.name="mmf_settings[external_exclude][]";}rowsBox.appendChild(clone);});}
