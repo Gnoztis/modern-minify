@@ -483,7 +483,7 @@ final class MMF_Admin {
 			'external'   => array(),
 			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_generator', 'remove_emoji', 'ver_mode', 'disable_gravatar' ),
 			'advisor'    => array(),
-			'images'     => array( 'lazy_media', 'image_webp', 'image_webp_ondemand', 'webp_require_accept', 'image_quality_jpeg', 'image_png_lossless', 'image_quality_png', 'avatar_webp', 'avatar_quality' ),
+			'images'     => array( 'image_webp', 'image_webp_ondemand', 'webp_require_accept', 'image_quality_jpeg', 'image_png_lossless', 'image_quality_png', 'avatar_webp', 'avatar_quality' ),
 			'advanced'   => array( 'cache_ttl', 'cache_max_files', 'cache_max_size', 'test_mode', 'debug', 'merge_max_files', 'merge_max_size' ),
 		);
 	}
@@ -666,10 +666,6 @@ final class MMF_Admin {
 			'avatar_quality'         => array(
 				__( 'Качество WebP для аватаров', 'modern-minify' ),
 				__( 'От 60 до 95; меньше — легче файл. Действует на новые копии.', 'modern-minify' ),
-			),
-			'lazy_media'             => array(
-				__( 'Ленивая загрузка картинок и iframe', 'modern-minify' ),
-				__( 'Браузер сам откладывает то, что ниже экрана: атрибуты loading=lazy и decoding=async. Первая картинка страницы не трогается — она обычно и есть LCP.', 'modern-minify' ),
 			),
 			'image_webp'             => array(
 				__( 'Создавать WebP для загруженных картинок', 'modern-minify' ),
