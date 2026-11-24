@@ -930,7 +930,9 @@ final class MMF_Images {
 		// A pending rebuild needs the cron even when on-demand conversion is off:
 		// that is exactly the case after a quality change, when every copy was
 		// deleted and nothing else would bring them back.
-		$on = (bool) MMF_Config::get( 'image_webp_ondemand', false ) || (bool) get_option( 'mmf_rebuild_sidecars', false );
+		// Background conversion is not optional: the queue and the rebuild both
+		// need the cron, and a site owner should never have to know that.
+		$on = true;
 
 		if ( $on && ! wp_next_scheduled( self::CRON_HOOK ) ) {
 			wp_schedule_event( time() + 300, 'mmf_five_minutes', self::CRON_HOOK );
@@ -963,7 +965,7 @@ final class MMF_Images {
 				'post_status'    => 'inherit',
 				'post_mime_type' => array( 'image/jpeg', 'image/png' ),
 				'fields'         => 'ids',
-				'posts_per_page' => 40,
+				'posts_per_page' => 100,
 				'no_found_rows'  => true,
 			)
 		);
@@ -972,7 +974,7 @@ final class MMF_Images {
 		$start = microtime( true );
 
 		foreach ( (array) $ids as $id ) {
-			if ( ( microtime( true ) - $start ) > 8 ) {
+			if ( ( microtime( true ) - $start ) > 20 ) {
 				break;
 			}
 
@@ -991,10 +993,6 @@ final class MMF_Images {
 
 	public static function cron_process(): void {
 		self::rebuild_sidecars();
-
-		if ( ! (bool) MMF_Config::get( 'image_webp_ondemand', false ) ) {
-			return;
-		}
 
 		$jobs = get_option( self::JOBS_OPTION, array() );
 		$jobs = is_array( $jobs ) ? $jobs : array();

@@ -337,10 +337,6 @@ final class MMF_Config {
 				'type'    => 'bool',
 				'default' => true,
 			),
-			'image_webp_ondemand'    => array(
-				'type'    => 'bool',
-				'default' => false,
-			),
 			'webp_require_accept'    => array(
 				'type'    => 'bool',
 				'default' => false,

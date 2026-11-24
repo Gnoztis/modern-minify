@@ -484,7 +484,7 @@ final class MMF_Admin {
 			'external'   => array(),
 			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_generator', 'remove_emoji', 'ver_mode', 'disable_gravatar' ),
 			'advisor'    => array(),
-			'images'     => array( 'image_webp', 'image_webp_ondemand', 'webp_require_accept', 'image_quality_jpeg', 'image_png_lossless', 'image_quality_png', 'avatar_webp', 'avatar_quality' ),
+			'images'     => array( 'image_webp', 'webp_require_accept', 'image_quality_jpeg', 'image_png_lossless', 'image_quality_png', 'avatar_webp', 'avatar_quality' ),
 			'advanced'   => array( 'cache_ttl', 'cache_max_files', 'cache_max_size', 'test_mode', 'debug', 'merge_max_files', 'merge_max_size' ),
 		);
 	}
@@ -676,10 +676,7 @@ final class MMF_Admin {
 				__( 'Отдавать WebP только с Accept: image/webp', 'modern-minify' ),
 				__( 'Выключено: копия отдаётся всем, если она существует. Включайте только если HTML не кешируется снаружи: при кеше первый запрос без WebP закрепит обычные картинки для всех.', 'modern-minify' ),
 			),
-			'image_webp_ondemand'    => array(
-				__( 'Конвертировать при первом просмотре (работает, когда страницу отдаёт PHP)', 'modern-minify' ),
-				__( 'Ставит файл в очередь после ответа (1–2 за запрос) и добавляет cron-догон раз в 5 минут. На сайте с полным кешем страниц PHP исполняется редко — надёжнее массовая конвертация. Выключено по умолчанию.', 'modern-minify' ),
-			),
+
 			'image_quality_jpeg'     => array(
 				__( 'Качество WebP для JPEG', 'modern-minify' ),
 				__( '60–95, по умолчанию 82. Действует на новые файлы.', 'modern-minify' ),
@@ -2748,11 +2745,6 @@ final class MMF_Admin {
 			self::WEBP_NONCE
 		);
 
-		printf(
-			'<a class="button button-primary mmf-rebuild-webp" href="%s">%s</a> ',
-			esc_url( wp_nonce_url( add_query_arg( array( 'page' => self::PAGE, 'action' => 'mmf_rebuild_webp' ), admin_url( 'options-general.php' ) ), self::WEBP_NONCE ) ),
-			esc_html__( 'Пересобрать WebP сейчас', 'modern-minify' )
-		);
 		echo '<p class="mmf-actions"><a class="button mmf-delete-webp" href="' . esc_url( $webp_url ) . '">' . esc_html__( 'Удалить все созданные WebP', 'modern-minify' ) . '</a></p>';
 	}
 
