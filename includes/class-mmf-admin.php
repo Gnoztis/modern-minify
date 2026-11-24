@@ -3221,8 +3221,6 @@ var exampleButtons=document.querySelectorAll(".mmf-examples-toggle");
 for(var ei=0;ei<exampleButtons.length;ei++){exampleButtons[ei].addEventListener("click",function(){var box=document.getElementById(this.getAttribute("aria-controls"));if(!box){return}var open=!box.hidden;box.hidden=open;this.setAttribute("aria-expanded",open?"false":"true");});}
 var avatarsButton=document.querySelector(".mmf-convert-avatars");
 if(avatarsButton){avatarsButton.addEventListener("click",function(event){if(!window.confirm(__MMF_AVATARS_PROMPT__)){event.preventDefault();}});}
-var webpDelete=document.querySelector(".mmf-delete-webp");
-if(webpDelete){webpDelete.addEventListener("click",function(event){if(!window.confirm(__MMF_WEBP_PROMPT__)){event.preventDefault();}});}
 var bulk=document.getElementById("mmf-webp-bulk");
 if(bulk){
   var bulkNonce=bulk.getAttribute("data-nonce");

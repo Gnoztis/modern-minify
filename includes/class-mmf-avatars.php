@@ -204,6 +204,12 @@ final class MMF_Avatars {
 		$quality = max( 60, min( 95, (int) MMF_Config::get( 'avatar_quality', 82 ) ) );
 		$sidecar = $file . '.webp';
 
+		if ( ! is_file( $sidecar ) && (bool) MMF_Config::get( 'image_webp_ondemand', false ) ) {
+			MMF_Images::enqueue( $file );
+
+			return $url;
+		}
+
 		// The copy lives next to the avatar, not in the clearable cache: a cache
 		// reset must not turn a cached page's avatar into a 404.
 		if ( ! is_file( $sidecar ) ) {
