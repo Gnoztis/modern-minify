@@ -9,9 +9,9 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Modern Minify 0.8.2\n"
+"Project-Id-Version: Modern Minify 0.8.3\n"
 "Report-Msgid-Bugs-To: https://github.com/Gnoztis/modern-minify/issues\n"
-"POT-Creation-Date: 2026-11-24T14:03:14+00:00\n"
+"POT-Creation-Date: 2026-11-24T14:19:53+00:00\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -1610,23 +1610,23 @@ msgstr ""
 msgid "Настройки не меняются, пока вы не нажмёте кнопку. Будут добавлены только отмеченные шаблоны."
 msgstr ""
 
-#: includes/class-mmf-admin.php:2902
+#: includes/class-mmf-admin.php:2978
 msgid "Очистить весь кеш минифицированных файлов, шрифтов и стилей?"
 msgstr ""
 
-#: includes/class-mmf-admin.php:2904
+#: includes/class-mmf-admin.php:2980
 msgid "Удалить все созданные WebP? Оригиналы останутся."
 msgstr ""
 
-#: includes/class-mmf-admin.php:2905
+#: includes/class-mmf-admin.php:2981
 msgid "Откладывать скрипты плагинов рискованно: проверьте страницу после сохранения."
 msgstr ""
 
-#: includes/class-mmf-admin.php:2907
+#: includes/class-mmf-admin.php:2983
 msgid "Пройти по пользователям и конвертировать их аватары? Это может занять время."
 msgstr ""
 
-#: includes/class-mmf-admin.php:2909
+#: includes/class-mmf-admin.php:2985
 msgid "Асинхронный CSS может дать вспышку неоформленного контента (FOUC). Проверьте первый экран."
 msgstr ""
 
