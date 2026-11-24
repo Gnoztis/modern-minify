@@ -939,7 +939,56 @@ final class MMF_Images {
 	/**
 	 * Cron fallback: ten queued files, then a scan of recent uploads.
 	 */
+	/**
+	 * Rebuilds the sidecars of the library, a batch at a time.
+	 *
+	 * Changing the quality deletes every generated copy, and nothing brings them
+	 * back until a visitor happens to load the image. This walks the library in
+	 * the background instead: the flag is set once by the settings screen and
+	 * cleared when no attachment is left without a fresh sidecar.
+	 *
+	 * @return int Files converted in this run.
+	 */
+	public static function rebuild_sidecars(): int {
+		if ( ! (bool) get_option( 'mmf_rebuild_sidecars', false ) ) {
+			return 0;
+		}
+
+		$ids = get_posts(
+			array(
+				'post_type'      => 'attachment',
+				'post_status'    => 'inherit',
+				'post_mime_type' => array( 'image/jpeg', 'image/png' ),
+				'fields'         => 'ids',
+				'posts_per_page' => 40,
+				'no_found_rows'  => true,
+			)
+		);
+
+		$done  = 0;
+		$start = microtime( true );
+
+		foreach ( (array) $ids as $id ) {
+			if ( ( microtime( true ) - $start ) > 8 ) {
+				break;
+			}
+
+			if ( self::needs_sidecar( (int) $id ) ) {
+				self::convert_attachment( (int) $id );
+				$done++;
+			}
+		}
+
+		if ( 0 === $done ) {
+			delete_option( 'mmf_rebuild_sidecars' );
+		}
+
+		return $done;
+	}
+
 	public static function cron_process(): void {
+		self::rebuild_sidecars();
+
 		if ( ! (bool) MMF_Config::get( 'image_webp_ondemand', false ) ) {
 			return;
 		}

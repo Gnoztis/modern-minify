@@ -512,6 +512,9 @@ final class MMF_Config {
 
 		if ( $saved && $regenerate && class_exists( 'MMF_Images' ) ) {
 			MMF_Images::delete_all();
+			// Nothing brings the copies back until somebody loads each image:
+			// the cron rebuilds them in the background instead.
+			update_option( 'mmf_rebuild_sidecars', '1', false );
 		}
 
 		return $saved;
