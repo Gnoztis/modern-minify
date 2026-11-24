@@ -1228,6 +1228,9 @@ final class MMF_Assets {
 	 */
 	private static function prepare_file( string $url, string $type ): array {
 		$path = self::resolve_path( $url, $type );
+		// The original name travels into the cache file name, so a page source
+		// shows cleantalk-public.min_8f3a1c.css instead of a bare hash.
+		$label = basename( (string) wp_parse_url( $url, PHP_URL_PATH ) );
 
 		if ( '' === $path ) {
 			return array( 'status' => 'failed' );
@@ -1273,7 +1276,7 @@ final class MMF_Assets {
 			}
 		}
 
-		$minified = ( 'js' === $type ) ? MMF_Minifier::minify_js( $source ) : MMF_Minifier::minify_css( $source );
+		$minified = ( 'js' === $type ) ? MMF_Minifier::minify_js( $source, true, $label ) : MMF_Minifier::minify_css( $source, true, $label );
 
 		if ( '' === $minified || $minified === $source ) {
 			return array( 'status' => 'unchanged' );
@@ -1283,14 +1286,14 @@ final class MMF_Assets {
 
 		// The cache write may have failed (read-only uploads): rewriting the URL
 		// then would point the browser at a file that does not exist.
-		if ( ! MMF_Cache::has( $hash, $type ) ) {
+		if ( ! MMF_Cache::has( $hash, $type, $label ) ) {
 			return array( 'status' => 'failed' );
 		}
 
 		return array(
 			'status'  => 'ok',
 			'content' => $minified,
-			'url'     => MMF_Cache::url( $hash, $type ),
+			'url'     => MMF_Cache::url( $hash, $type, $label ),
 			'size'    => strlen( $minified ),
 		);
 	}

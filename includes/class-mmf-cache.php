@@ -236,8 +236,8 @@ final class MMF_Cache {
 	 * @param string $hash Cache name.
 	 * @param string $type `js` or `css`.
 	 */
-	public static function path( string $hash, string $type ): string {
-		$name = self::file_name( $hash, $type );
+	public static function path( string $hash, string $type, string $label = '' ): string {
+		$name = self::name_for( $hash, $type, $label );
 		$dir  = self::base_dir();
 
 		if ( '' === $name || '' === $dir ) {
@@ -253,8 +253,8 @@ final class MMF_Cache {
 	 * @param string $hash Cache name.
 	 * @param string $type `js` or `css`.
 	 */
-	public static function url( string $hash, string $type ): string {
-		$name = self::file_name( $hash, $type );
+	public static function url( string $hash, string $type, string $label = '' ): string {
+		$name = self::name_for( $hash, $type, $label );
 		$base = self::base_url();
 
 		if ( '' === $name || '' === $base ) {
@@ -271,8 +271,8 @@ final class MMF_Cache {
 	 * @param string $type `js` or `css`.
 	 * @return string|false
 	 */
-	public static function get( string $hash, string $type ) {
-		$path = self::path( $hash, $type );
+	public static function get( string $hash, string $type, string $label = '' ) {
+		$path = self::path( $hash, $type, $label );
 
 		if ( '' === $path || ! is_readable( $path ) ) {
 			return false;
@@ -290,8 +290,8 @@ final class MMF_Cache {
 	 * @param string $hash Cache name.
 	 * @param string $type `js` or `css`.
 	 */
-	public static function has( string $hash, string $type ): bool {
-		$path = self::path( $hash, $type );
+	public static function has( string $hash, string $type, string $label = '' ): bool {
+		$path = self::path( $hash, $type, $label );
 
 		return '' !== $path && is_readable( $path );
 	}
@@ -308,8 +308,8 @@ final class MMF_Cache {
 	 * @param string $type    `js` or `css`.
 	 * @return array{hash:string,path:string,url:string,size:int}|false
 	 */
-	public static function put( string $hash, string $content, string $type ) {
-		$path = self::path( $hash, $type );
+	public static function put( string $hash, string $content, string $type, string $label = '' ) {
+		$path = self::path( $hash, $type, $label );
 
 		if ( '' === $path || '' === $content || ! self::ensure_dir() ) {
 			return false;
@@ -330,7 +330,7 @@ final class MMF_Cache {
 		return array(
 			'hash' => $hash,
 			'path' => $path,
-			'url'  => self::url( $hash, $type ),
+			'url'  => self::url( $hash, $type, $label ),
 			'size' => (int) $existing,
 		);
 	}
@@ -639,6 +639,57 @@ final class MMF_Cache {
 	 * @param string $hash Cache name.
 	 * @param string $type `js` or `css`.
 	 */
+	/**
+	 * Readable file name: the original name plus a short hash.
+	 *
+	 * The owner asked to see what a file is: a bare hash says nothing, while
+	 * cleantalk-public.min_8f3a1c.css says everything. The hash still makes the
+	 * name unique per content, so the cache contract does not change.
+	 *
+	 * @param string $label Original file name, may be empty.
+	 * @param string $hash  Content hash.
+	 * @param string $type  css or js.
+	 */
+	public static function readable_name( string $label, string $hash, string $type ): string {
+		$short = substr( (string) preg_replace( '/[^a-z0-9]/i', '', $hash ), 0, 6 );
+		$short = '' !== $short ? $short : 'cache';
+
+		$label = strtolower( basename( $label ) );
+		$label = (string) preg_replace( '/[^a-z0-9._-]+/', '-', $label );
+		$label = trim( $label, '.-' );
+
+		$ext = 'css' === $type ? 'css' : 'js';
+
+		if ( '' === $label ) {
+			return 'mmf_' . $short . '.' . $ext;
+		}
+
+		$suffix = '.' . $ext;
+		$base   = str_ends_with( $label, $suffix ) ? substr( $label, 0, -strlen( $suffix ) ) : $label;
+		$base   = trim( $base, '.-' );
+
+		if ( '' === $base ) {
+			$base = 'mmf';
+		}
+
+		if ( strlen( $base ) > 60 ) {
+			$base = substr( $base, 0, 60 );
+		}
+
+		return $base . '_' . $short . '.' . $ext;
+	}
+
+	/**
+	 * File name for a hash, readable when a label is known.
+	 *
+	 * @param string $hash  Content hash.
+	 * @param string $type  css or js.
+	 * @param string $label Original file name, may be empty.
+	 */
+	private static function name_for( string $hash, string $type, string $label = '' ): string {
+		return '' === $label ? self::file_name( $hash, $type ) : self::readable_name( $label, $hash, $type );
+	}
+
 	private static function file_name( string $hash, string $type ): string {
 		if ( ! isset( self::EXTENSIONS[ $type ] ) || 1 !== preg_match( '/^[a-f0-9]{32}$/', $hash ) ) {
 			return '';

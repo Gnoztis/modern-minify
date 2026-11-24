@@ -51,8 +51,8 @@ final class MMF_Minifier {
 	 * @param string $source    Source code.
 	 * @param bool   $use_cache Read from and write to the file cache.
 	 */
-	public static function minify_js( string $source, bool $use_cache = true ): string {
-		return self::minify( $source, self::JS, $use_cache );
+	public static function minify_js( string $source, bool $use_cache = true, string $label = '' ): string {
+		return self::minify( $source, self::JS, $use_cache, $label );
 	}
 
 	/**
@@ -61,8 +61,8 @@ final class MMF_Minifier {
 	 * @param string $source    Source code.
 	 * @param bool   $use_cache Read from and write to the file cache.
 	 */
-	public static function minify_css( string $source, bool $use_cache = true ): string {
-		return self::minify( $source, self::CSS, $use_cache );
+	public static function minify_css( string $source, bool $use_cache = true, string $label = '' ): string {
+		return self::minify( $source, self::CSS, $use_cache, $label );
 	}
 
 	/**
@@ -113,7 +113,7 @@ final class MMF_Minifier {
 	 * @param string $type      `js` or `css`.
 	 * @param bool   $use_cache Read from and write to the file cache.
 	 */
-	private static function minify( string $source, string $type, bool $use_cache ): string {
+	private static function minify( string $source, string $type, bool $use_cache, string $label = '' ): string {
 		$source = self::strip_bom( trim( $source ) );
 
 		if ( '' === $source ) {
@@ -124,7 +124,7 @@ final class MMF_Minifier {
 
 		if ( $use_cache && class_exists( 'MMF_Cache' ) ) {
 			$hash   = self::hash( $source, $type );
-			$cached = MMF_Cache::get( $hash, $type );
+			$cached = MMF_Cache::get( $hash, $type, $label );
 
 			if ( is_string( $cached ) && '' !== $cached ) {
 				self::$counters['cached']++;
@@ -145,7 +145,7 @@ final class MMF_Minifier {
 		}
 
 		if ( '' !== $hash ) {
-			MMF_Cache::put( $hash, $minified, $type );
+			MMF_Cache::put( $hash, $minified, $type, $label );
 		}
 
 		self::$counters[ $type ]++;

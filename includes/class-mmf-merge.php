@@ -539,8 +539,19 @@ final class MMF_Merge {
 		}
 
 		$content = implode( 'css' === $type ? "\n" : ";\n", $parts );
+		// A bundle is named after the first file in it plus the hash of the whole
+		// payload, so a page source still shows what the bundle is made of.
+		$label = 'bundle';
+
+		if ( isset( $items[0]['src'] ) ) {
+			$first = basename( (string) wp_parse_url( (string) $items[0]['src'], PHP_URL_PATH ) );
+
+			if ( '' !== $first ) {
+				$label = 'bundle-' . $first;
+			}
+		}
 		$hash    = MMF_Cache::hash( $content, $type );
-		$put     = MMF_Cache::put( $hash, $content, $type );
+		$put     = MMF_Cache::put( $hash, $content, $type, $label );
 
 		if ( ! is_array( $put ) || empty( $put['url'] ) ) {
 			return array();
