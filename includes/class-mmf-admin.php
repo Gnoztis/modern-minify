@@ -3117,80 +3117,106 @@ if(adviceButton){adviceButton.addEventListener("click",function(event){var risky
 var asyncLinks=document.querySelectorAll(".mmf-async-css");
 for(var ai=0;ai<asyncLinks.length;ai++){asyncLinks[ai].addEventListener("click",function(event){if(!window.confirm(__MMF_ASYNC_CSS_PROMPT__)){event.preventDefault();}});}
 var menuButtons=document.querySelectorAll(".mmf-menu-toggle");
+
+function menuOf(button){
+  // The menu is moved to <body> when opened, so nextElementSibling stops being
+  // a reliable reference: the element is remembered on the button instead.
+  if(!button.__mmfMenu){
+    var m=button.nextElementSibling;
+    if(!m||!m.classList.contains("mmf-menu")){return null;}
+    button.__mmfMenu=m;
+  }
+  return button.__mmfMenu;
+}
+
 function closeMenu(button,focusBack){
-  var menu=button.nextElementSibling;
-  if(!menu||!menu.classList.contains("mmf-menu")){return;}
+  var menu=menuOf(button);
+  if(!menu){return;}
   menu.hidden=true;
   menu.style.display="none";
-  if(menu.__mmfHome&&menu.__mmfHome.parent){menu.__mmfHome.parent.insertBefore(menu,menu.__mmfHome.next);menu.__mmfHome=null;}
+  if(menu.__mmfHome&&menu.__mmfHome.parent){
+    menu.__mmfHome.parent.insertBefore(menu,menu.__mmfHome.next);
+    menu.__mmfHome=null;
+  }
   button.setAttribute("aria-expanded","false");
   if(focusBack){button.focus();}
 }
-function closeOtherMenus(keep){
-  for(var i=0;i<menuButtons.length;i++){if(menuButtons[i]!==keep){closeMenu(menuButtons[i],false);}}
-}
+
 function openMenu(button){
-  var menu=button.nextElementSibling;
-  if(!menu||!menu.classList.contains("mmf-menu")){return;}
-  closeOtherMenus(button);
-  // The menu is moved to <body> and styled inline: a table cell or the
-  // horizontally scrolling wrapper would otherwise clip it, and a stylesheet
-  // rule could be overridden by the theme.
+  var menu=menuOf(button);
+  if(!menu){return;}
+  for(var i=0;i<menuButtons.length;i++){if(menuButtons[i]!==button){closeMenu(menuButtons[i],false);}}
   menu.__mmfHome={parent:menu.parentNode,next:menu.nextSibling};
   document.body.appendChild(menu);
   menu.hidden=false;
   menu.style.display="block";
   menu.style.position="fixed";
   menu.style.zIndex="100001";
-  menu.style.minWidth="170px";
+  menu.style.minWidth="180px";
   menu.style.maxWidth="min(320px,calc(100vw - 24px))";
   menu.style.background="#fff";
   menu.style.color="#1d2327";
   menu.style.border="1px solid #c3c4c7";
-  menu.style.borderRadius="4px";
-  menu.style.boxShadow="0 4px 12px rgba(0,0,0,.15)";
-  menu.style.padding="4px";
+  menu.style.borderRadius="6px";
+  menu.style.boxShadow="0 6px 16px rgba(0,0,0,.18)";
+  menu.style.padding="6px";
   menu.style.textAlign="left";
   var items=menu.querySelectorAll(".mmf-menu__item");
-  for(var k=0;k<items.length;k++){items[k].style.display="block";items[k].style.padding="6px 8px";items[k].style.whiteSpace="nowrap";items[k].style.textDecoration="none";items[k].style.color="#1d2327";}
+  for(var k=0;k<items.length;k++){
+    items[k].style.display="block";
+    items[k].style.padding="8px 10px";
+    items[k].style.whiteSpace="nowrap";
+    items[k].style.textDecoration="none";
+    items[k].style.color="#1d2327";
+    items[k].style.borderRadius="4px";
+  }
   var r=button.getBoundingClientRect();
-  var w=menu.offsetWidth||170;
+  var w=menu.offsetWidth||180;
   var h=menu.offsetHeight||120;
-  var openUp=(r.bottom+h+8)>window.innerHeight;
-  menu.style.top=(openUp?Math.max(8,r.top-h-4):(r.bottom+4))+"px";
+  var up=(r.bottom+h+8)>window.innerHeight;
+  menu.style.top=(up?Math.max(8,r.top-h-4):(r.bottom+4))+"px";
   menu.style.left=Math.max(8,Math.min(r.right-w,window.innerWidth-w-8))+"px";
   button.setAttribute("aria-expanded","true");
 }
+
 for(var mi=0;mi<menuButtons.length;mi++){
   menuButtons[mi].addEventListener("click",function(event){
     event.stopPropagation();
-    var menu=this.nextElementSibling;
-    if(menu&&menu.classList.contains("mmf-menu")&&!menu.hidden){closeMenu(this,false);}else{openMenu(this);}
+    event.preventDefault();
+    var menu=menuOf(this);
+    if(menu&&!menu.hidden){closeMenu(this,false);}else{openMenu(this);}
   });
 }
+
+// A click anywhere outside the toggle and its menu closes it. The menu lives on
+// <body> now, so the check must compare against both elements.
 document.addEventListener("click",function(event){
   for(var i=0;i<menuButtons.length;i++){
-    var m=menuButtons[i].nextElementSibling;
-    if(m&&m.classList.contains("mmf-menu")&&!m.hidden&&!m.contains(event.target)){closeMenu(menuButtons[i],false);}
+    var m=menuOf(menuButtons[i]);
+    if(!m||m.hidden){continue;}
+    if(!m.contains(event.target)&&!menuButtons[i].contains(event.target)){closeMenu(menuButtons[i],false);}
   }
 });
+
 document.addEventListener("keydown",function(event){
   if("Escape"!==event.key){return;}
   for(var i=0;i<menuButtons.length;i++){
-    var m=menuButtons[i].nextElementSibling;
-    if(m&&m.classList.contains("mmf-menu")&&!m.hidden){closeMenu(menuButtons[i],true);}
+    var m=menuOf(menuButtons[i]);
+    if(m&&!m.hidden){closeMenu(menuButtons[i],true);}
   }
 });
+
 window.addEventListener("scroll",function(){
   for(var i=0;i<menuButtons.length;i++){
-    var m=menuButtons[i].nextElementSibling;
-    if(!m||!m.classList.contains("mmf-menu")||m.hidden){continue;}
+    var m=menuOf(menuButtons[i]);
+    if(!m||m.hidden){continue;}
     var r=menuButtons[i].getBoundingClientRect();
     var h=m.offsetHeight||120;
     var up=(r.bottom+h+8)>window.innerHeight;
     m.style.top=(up?Math.max(8,r.top-h-4):(r.bottom+4))+"px";
   }
 },true);
+
 var exampleButtons=document.querySelectorAll(".mmf-examples-toggle");
 for(var ei=0;ei<exampleButtons.length;ei++){exampleButtons[ei].addEventListener("click",function(){var box=document.getElementById(this.getAttribute("aria-controls"));if(!box){return}var open=!box.hidden;box.hidden=open;this.setAttribute("aria-expanded",open?"false":"true");});}
 var avatarsButton=document.querySelector(".mmf-convert-avatars");
