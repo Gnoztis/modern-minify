@@ -549,8 +549,17 @@ final class MMF_Assets {
 		$href = (string) ( $attributes['href'] ?? '' );
 
 		if ( str_contains( strtolower( (string) ( $attributes['rel'] ?? '' ) ), 'stylesheet' ) && '' !== $href && MMF_Assets::matches( $href, $settings['async_css'] ?? array() ) && MMF_Assets::is_local_url( $href ) && ! MMF_Assets::matches( $href, $settings['exclude_css'] ?? array() ) ) {
-			$js = 'document.addEventListener("DOMContentLoaded",function(){var l=document.createElement("link");l.rel="stylesheet";l.href=' . wp_json_encode( $href ) . ';document.head.appendChild(l);});';
-			$tag_async = MMF_Loader::script_tag( $js, array( 'id' => 'mmf-async-css-' . substr( md5( $href ), 0, 8 ), 'data-mmf-async-css' => '1' ) );
+			// A stylesheet appended at DOMContentLoaded still delays the first paint:
+			// the link is there before the browser has drawn anything. Preloading
+			// does not block, and the same element becomes a stylesheet once the
+			// bytes have arrived, so the first paint is never waiting for it.
+			$async_id = 'mmf-preload-' . substr( md5( $href ), 0, 8 );
+			$js       = 'var p=document.getElementById(' . wp_json_encode( $async_id ) . ');if(!p){return}'
+				. 'var go=function(){if(p.rel!=="stylesheet"){p.rel="stylesheet";}};'
+				. 'p.addEventListener("load",go);'
+				. 'p.addEventListener("error",function(){go();});'
+				. 'setTimeout(go,1200);';
+			$tag_async = '<link rel="preload" as="style" id="' . esc_attr( $async_id ) . '" href="' . esc_url( $href ) . '" data-mmf-async-css="1">' . MMF_Loader::script_tag( $js, array( 'id' => 'mmf-async-css-' . substr( md5( $href ), 0, 8 ) ) );
 
 			if ( '' === $tag_async || ( MMF_Loader::csp_present() && ! MMF_Loader::tag_has_nonce( $tag_async ) ) ) {
 				$result['stats']['async_blocked'] = 1;
@@ -1136,15 +1145,17 @@ final class MMF_Assets {
 				$guard         = '<style id="mmf-fouc-guard">html{visibility:hidden}</style>';
 			}
 
-			$js = 'document.addEventListener("DOMContentLoaded",function(){var g=document.getElementById("mmf-fouc-guard");'
+			$theme_id = 'mmf-theme-preload-' . substr( md5( $href ), 0, 8 );
+			$js       = 'var g=document.getElementById("mmf-fouc-guard");'
 				. 'var show=function(){if(g&&g.parentNode){g.parentNode.removeChild(g);}g=null;};'
-				. 'var l=document.createElement("link");l.rel="stylesheet";l.href=' . wp_json_encode( $href ) . ';'
-				. 'l.onload=show;l.onerror=show;document.head.appendChild(l);setTimeout(show,1500);});';
-
+				. 'var p=document.getElementById(' . wp_json_encode( $theme_id ) . ');'
+				. 'if(!p){show();return}'
+				. 'var go=function(){p.rel="stylesheet";show();};'
+				. 'p.addEventListener("load",go);p.addEventListener("error",show);setTimeout(show,1500);';
 			$tag_async = MMF_Loader::script_tag( $js, array( 'id' => 'mmf-theme-css-' . substr( md5( $href ), 0, 8 ), 'data-mmf-theme-css' => '1' ) );
 
 			if ( '' !== $tag_async && ( ! MMF_Loader::csp_present() || MMF_Loader::tag_has_nonce( $tag_async ) ) ) {
-				$result['tag']                 = $guard . '<link rel="preload" as="style" href="' . esc_url( $href ) . '" data-mmf-theme-async="1">' . $tag_async;
+				$result['tag']                 = $guard . '<link rel="preload" as="style" id="' . esc_attr( $theme_id ) . '" href="' . esc_url( $href ) . '" data-mmf-theme-async="1">' . $tag_async;
 				$result['stats']['theme_async'] = 1;
 
 				return $result;
