@@ -1107,6 +1107,34 @@ final class MMF_Assets {
 		$force_inline = self::matches( $href, $settings['inline_css_extra'] ?? array() );
 		$force_async  = self::matches( $href, $settings['async_css'] ?? array() );
 
+		// Theme stylesheet out of the critical path (opt-in). The page is hidden
+		// until the stylesheet applies or 1.5 s pass, whichever comes first: the
+		// visitor either sees a styled page or nothing, never bare text.
+		if ( ! empty( $settings['css_async_theme'] ) && false !== strpos( $href, '/wp-content/themes/' ) && self::is_local_url( $href ) && ! self::matches( $href, $settings['exclude_css'] ?? array() ) ) {
+			static $guard_printed = false;
+
+			$guard = '';
+
+			if ( ! $guard_printed ) {
+				$guard_printed = true;
+				$guard         = '<style id="mmf-fouc-guard">html{visibility:hidden}</style>';
+			}
+
+			$js = 'document.addEventListener("DOMContentLoaded",function(){var g=document.getElementById("mmf-fouc-guard");'
+				. 'var show=function(){if(g&&g.parentNode){g.parentNode.removeChild(g);}g=null;};'
+				. 'var l=document.createElement("link");l.rel="stylesheet";l.href=' . wp_json_encode( $href ) . ';'
+				. 'l.onload=show;l.onerror=show;document.head.appendChild(l);setTimeout(show,1500);});';
+
+			$tag_async = MMF_Loader::script_tag( $js, array( 'id' => 'mmf-theme-css-' . substr( md5( $href ), 0, 8 ), 'data-mmf-theme-css' => '1' ) );
+
+			if ( '' !== $tag_async && ( ! MMF_Loader::csp_present() || MMF_Loader::tag_has_nonce( $tag_async ) ) ) {
+				$result['tag']                 = $guard . '<link rel="preload" as="style" href="' . esc_url( $href ) . '" data-mmf-theme-async="1">' . $tag_async;
+				$result['stats']['theme_async'] = 1;
+
+				return $result;
+			}
+		}
+
 		if ( empty( $settings['minify_css'] ) && ! $force_inline && ! $force_async ) {
 			return $result;
 		}

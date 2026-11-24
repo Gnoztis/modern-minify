@@ -123,6 +123,12 @@ final class MMF_Config {
 				'type'    => 'list',
 				'default' => array(),
 			),
+			// Theme stylesheet loaded without blocking the first paint, with a
+			// visibility guard so nothing flashes unstyled.
+			'css_async_theme'        => array(
+				'type'    => 'bool',
+				'default' => false,
+			),
 			'inline_css_limit'       => array(
 				'type'    => 'int',
 				'default' => 20,

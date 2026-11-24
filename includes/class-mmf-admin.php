@@ -365,9 +365,11 @@ final class MMF_Admin {
 
 		foreach ( self::tabs() as $slug => $label ) {
 			printf(
-				'<a href="%s" class="nav-tab%s">%s</a>',
+				'<a href="%s" class="nav-tab%s" data-mm-tab="%s"%s>%s</a>',
 				esc_url( self::tab_url( (string) $slug ) ),
 				$slug === $tab ? ' nav-tab-active' : '',
+				esc_attr( (string) $slug ),
+				$slug === $tab ? ' aria-current="page"' : '',
 				esc_html( (string) $label )
 			);
 		}
@@ -465,7 +467,7 @@ final class MMF_Admin {
 		return array(
 			'status'     => array(),
 			'javascript' => array( 'minify_js', 'merge_js', 'async_js', 'defer_js', 'defer_external', 'defer_skip', 'exclude_js', 'remove_jquery_migrate', 'move_scripts_to_footer', 'delay_js', 'delay_js_exclude', 'delay_js_timeout', 'rocket_mode', 'rocket_exclude' ),
-			'css'        => array( 'minify_css', 'merge_css', 'inline_css', 'inline_css_limit', 'inline_css_extra', 'async_css', 'remove_print_css', 'exclude_css' ),
+			'css'        => array( 'minify_css', 'merge_css', 'inline_css', 'inline_css_limit', 'inline_css_extra', 'async_css', 'css_async_theme', 'remove_print_css', 'exclude_css' ),
 			'fonts'      => array( 'fonts_method', 'fawesome_method', 'inline_fonts_css' ),
 			'external'   => array(),
 			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_generator', 'remove_emoji', 'ver_mode', 'disable_gravatar' ),
@@ -557,6 +559,10 @@ final class MMF_Admin {
 			'inline_css_extra'       => array(
 				__( 'Встроить эти CSS-файлы', 'modern-minify' ),
 				__( 'Шаблоны путей через строку: выбранный файл встраивается в страницу, даже если больше общего порога.', 'modern-minify' ),
+			),
+			'css_async_theme'        => array(
+				__( 'Загружать CSS темы асинхронно', 'modern-minify' ),
+				__( 'Стиль темы уходит из критического пути: страница показывается, когда стиль применён, или через 1,5 с. Меняет первый экран — включайте осознанно.', 'modern-minify' ),
 			),
 			'async_css'              => array(
 				__( 'Загружать эти CSS асинхронно', 'modern-minify' ),
@@ -3272,6 +3278,30 @@ window.addEventListener("scroll",function(){
   }
 },true);
 
+var tabLinks=document.querySelectorAll(".nav-tab[data-mm-tab]");
+function showTab(slug,push){
+  var target=document.getElementById("mmf-panel-"+slug);
+  if(!target){return}
+  var panels=document.querySelectorAll(".mmf-panel");
+  for(var i=0;i<panels.length;i++){var p=panels[i];var on=p===target;p.style.display=on?"":"none";if(on){p.classList.remove("mmf-panel--hidden");}else{p.classList.add("mmf-panel--hidden");}}
+  for(var j=0;j<tabLinks.length;j++){var on=tabLinks[j].getAttribute("data-mm-tab")===slug;if(on){tabLinks[j].classList.add("nav-tab-active");tabLinks[j].setAttribute("aria-current","page");}else{tabLinks[j].classList.remove("nav-tab-active");tabLinks[j].removeAttribute("aria-current");}}
+  if(push&&window.history&&history.pushState){history.pushState({mmTab:slug},"",tabLinks.length?document.querySelector('.nav-tab[data-mm-tab="'+slug+'"]').getAttribute("href"):window.location.href);}
+  var h=target.querySelector("h2,.mmf-section-title");
+  if(h){h.setAttribute("tabindex","-1");h.focus({preventScroll:true});}
+}
+for(var ti=0;ti<tabLinks.length;ti++){
+  tabLinks[ti].addEventListener("click",function(event){
+    if(event.metaKey||event.ctrlKey||event.shiftKey||event.altKey||0!==event.button){return}
+    event.preventDefault();
+    showTab(this.getAttribute("data-mm-tab"),true);
+    var nav=document.querySelector(".mmf-tabs");
+    if(nav&&window.scrollTo){window.scrollTo({top:Math.max(0,nav.getBoundingClientRect().top+window.pageYOffset-40),behavior:"smooth"});}
+  });
+}
+window.addEventListener("popstate",function(){
+  var m=/[?&]tab=([a-z]+)/.exec(window.location.search);
+  if(m&&m[1]){showTab(m[1],false);}
+});
 var exampleButtons=document.querySelectorAll(".mmf-examples-toggle");
 for(var ei=0;ei<exampleButtons.length;ei++){exampleButtons[ei].addEventListener("click",function(){var box=document.getElementById(this.getAttribute("aria-controls"));if(!box){return}var open=!box.hidden;box.hidden=open;this.setAttribute("aria-expanded",open?"false":"true");});}
 var avatarsButton=document.querySelector(".mmf-convert-avatars");
