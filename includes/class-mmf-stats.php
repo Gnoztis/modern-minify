@@ -62,6 +62,8 @@ final class MMF_Stats {
 			'failed'             => 0,
 			'delayed'            => 0,
 			'last_delayed'       => 0,
+			'last_css_before'    => 0,
+			'last_css_after'     => 0,
 			'rocket'             => 0,
 			'gravatar'           => 0,
 			'bundles'            => 0,

@@ -90,7 +90,7 @@ final class MMF_Admin {
 			'remove_emoji'     => true,
 			'external_mode'    => 'local',
 			'merge_js'         => false,
-			'merge_css'        => false,
+			'merge_css'        => true,
 			'defer_js'         => false,
 			'delay_js'         => array(),
 			'rocket_mode'      => false,
@@ -113,7 +113,8 @@ final class MMF_Admin {
 			__( 'Версии файлов — хеш содержимого', 'modern-minify' ),
 			__( 'Emoji — удалять', 'modern-minify' ),
 			__( 'Внешние файлы — локально', 'modern-minify' ),
-			__( 'Объединение файлов — выключить', 'modern-minify' ),
+			__( 'Объединение CSS — включить (CSS блокирует отрисовку)', 'modern-minify' ),
+			__( 'Объединение JS — выключить (на HTTP/2 чаще вредит)', 'modern-minify' ),
 			__( 'Delay JS — выключить (список шаблонов будет очищен)', 'modern-minify' ),
 			__( 'Rocket-режим — выключить', 'modern-minify' ),
 			__( 'defer для локальных скриптов — выключить', 'modern-minify' ),
@@ -438,7 +439,7 @@ final class MMF_Admin {
 			),
 			'merge_js'               => array(
 				__( 'Объединять JS-файлы', 'modern-minify' ),
-				__( 'Только рядом стоящие локальные файлы без async/defer/module; при ошибке теги остаются как были. На HTTP/2 чаще вредит — проверяйте замером.', 'modern-minify' ),
+				__( 'Только рядом стоящие локальные файлы без async/defer/module; при ошибке теги остаются как были. На HTTP/2 объединение JS чаще вредит: скрипты и так не блокируют отрисовку, а один большой файл откладывает выполнение. Включайте по замеру.', 'modern-minify' ),
 			),
 			'async_js'               => array(
 				__( 'Шаблоны для async', 'modern-minify' ),
@@ -502,7 +503,7 @@ final class MMF_Admin {
 			),
 			'merge_css'              => array(
 				__( 'Объединять CSS-файлы', 'modern-minify' ),
-				__( 'Только рядом стоящие локальные файлы с одинаковым media; print не объединяется. На HTTP/2 чаще вредит — проверяйте замером.', 'modern-minify' ),
+				__( 'CSS блокирует первую отрисовку: файлы всё равно ждут друг друга в критической цепочке, поэтому объединение помогает и на HTTP/2. Только рядом стоящие локальные файлы с одинаковым media; print и speech не объединяются.', 'modern-minify' ),
 			),
 			'inline_css'             => array(
 				__( 'Встраивать небольшие CSS', 'modern-minify' ),
@@ -759,6 +760,7 @@ final class MMF_Admin {
 				__( 'Delay JS на последней странице', 'modern-minify' ) => (string) (int) $stats['last_delayed'],
 				__( 'Rocket-режимом', 'modern-minify' )        => (string) (int) $stats['rocket'],
 				__( 'Пакетов собрано', 'modern-minify' )       => (string) (int) $stats['bundles'],
+				__( 'CSS-файлов: было → стало', 'modern-minify' ) => ( 0 === (int) $stats['last_css_before'] && 0 === (int) $stats['last_css_after'] ) ? '—' : (int) $stats['last_css_before'] . ' → ' . (int) $stats['last_css_after'],
 				__( 'Файлов в пакетах', 'modern-minify' )      => (string) (int) $stats['bundled_files'],
 				__( 'Запросов сэкономлено', 'modern-minify' )  => (string) max( 0, (int) $stats['bundled_files'] - (int) $stats['bundles'] ),
 				__( 'Размер пакетов, КБ', 'modern-minify' )     => (string) (int) round( (int) $stats['bundle_bytes'] / 1024 ),

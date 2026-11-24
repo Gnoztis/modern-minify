@@ -56,6 +56,8 @@ final class MMF_Merge {
 			'bundles'       => 0,
 			'bundled_files' => 0,
 			'bundle_bytes'  => 0,
+			'css_before'    => 0,
+			'css_after'     => 0,
 		);
 
 		if ( '' === $html ) {
@@ -64,6 +66,8 @@ final class MMF_Merge {
 				'stats' => $stats,
 			);
 		}
+
+		$stats['css_before'] = self::count_stylesheets( $html );
 
 		$tokens = MMF_HTML::tokenize( $html );
 		$count  = count( $tokens );
@@ -78,6 +82,7 @@ final class MMF_Merge {
 				$index++;
 				continue;
 			}
+
 
 			$group = self::group( $tokens, $index, $settings );
 
@@ -107,10 +112,35 @@ final class MMF_Merge {
 			$index = $group['last'] + 1;
 		}
 
+		$stats['css_after'] = self::count_stylesheets( $out );
+
 		return array(
 			'html'  => $out,
 			'stats' => $stats,
 		);
+	}
+
+	/**
+	 * Number of stylesheet links in a document.
+	 *
+	 * @param string $html Document.
+	 */
+	private static function count_stylesheets( string $html ): int {
+		$count = 0;
+
+		foreach ( MMF_HTML::tokenize( $html ) as $token ) {
+			if ( 'tag' !== $token['type'] || $token['closing'] || 'link' !== $token['name'] ) {
+				continue;
+			}
+
+			$rel = strtolower( (string) ( MMF_Assets::attributes( (string) $token['raw'] )['rel'] ?? '' ) );
+
+			if ( str_contains( $rel, 'stylesheet' ) ) {
+				$count++;
+			}
+		}
+
+		return $count;
 	}
 
 	/**

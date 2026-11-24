@@ -258,6 +258,8 @@ final class MMF_Frontend {
 				? $assets['stats']['external_report']
 				: array();
 
+			$stats['last_css_before'] = (int) ( $assets['stats']['css_before'] ?? 0 );
+			$stats['last_css_after']  = (int) ( $assets['stats']['css_after'] ?? 0 );
 			$stats['last_scripts'] = is_array( $assets['stats']['last_scripts'] ?? null ) ? $assets['stats']['last_scripts'] : array();
 			$stats['last_defer']   = is_array( $assets['stats']['last_defer'] ?? null ) ? $assets['stats']['last_defer'] : array();
 

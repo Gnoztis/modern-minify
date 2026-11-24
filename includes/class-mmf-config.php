@@ -106,7 +106,7 @@ final class MMF_Config {
 			),
 			'merge_css'              => array(
 				'type'    => 'bool',
-				'default' => false,
+				'default' => true,
 			),
 			// CSS shaping.
 			'inline_css'             => array(
