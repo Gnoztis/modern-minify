@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Modern Minify
  * Description:       Минификация CSS, JS и HTML, асинхронная загрузка файлов и обработка Google Fonts.
- * Version:           0.8.3
+ * Version:           0.8.4
  * Requires at least: 7.0
  * Tested up to:      7.1
  * Requires PHP:      8.0
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'MMF_VERSION', '0.8.3' );
+define( 'MMF_VERSION', '0.8.4' );
 
 /**
  * Cache-signature version of the minifiers.

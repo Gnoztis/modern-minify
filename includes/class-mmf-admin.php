@@ -1489,8 +1489,11 @@ final class MMF_Admin {
 			'test-off'    => __( 'Тестовый режим выключен.', 'modern-minify' ),
 			'recommended-noop' => __( 'Настройки уже соответствуют рекомендуемым.', 'modern-minify' ),
 			'advice'      => __( 'Выбранные шаблоны добавлены в список, кеш сброшен.', 'modern-minify' ),
+			'advice-blocked'     => __( 'Шаблоны не применены: они затрагивают тему, jQuery, ядро WordPress или накрывают несколько файлов. Подробности — в «Последнем действии».', 'modern-minify' ),
+			'advice-rolled-back' => __( 'Настройки отменены: после применения страница теряет jQuery. Шаблон слишком широкий.', 'modern-minify' ),
 			'webp-deleted' => __( 'Сгенерированные WebP удалены.', 'modern-minify' ),
 			'css-action'  => __( 'Действие применено, кеш сброшен.', 'modern-minify' ),
+			'css-action-blocked' => __( 'Асинхронная загрузка отклонена: это стиль темы или ядра — страница осталась бы без оформления.', 'modern-minify' ),
 			'avatars'     => __( 'Аватары обработаны.', 'modern-minify' ),
 		);
 
@@ -1587,6 +1590,137 @@ final class MMF_Admin {
 	}
 
 	/**
+	 * Rejects advice patterns that would take the site down.
+	 *
+	 * The lesson came from a live incident: `*scripts.min.js*` matched four
+	 * files including the theme's own script, and deferring it left the page
+	 * without its interface. A pattern that matches more than one resource, or
+	 * that touches the theme, jQuery or a WordPress core script, is refused
+	 * before anything is written.
+	 *
+	 * @param array<int,string> $patterns Patterns the user asked to add.
+	 * @param string            $kind     `js` or `css`.
+	 * @return array{ok:bool,rejected:array<int,array{pattern:string,reason:string}>,matched:int}
+	 */
+	private static function advice_guard( array $patterns, string $kind ): array {
+		$stats     = MMF_Stats::all();
+		$resources = isset( $stats['last_resources'] ) && is_array( $stats['last_resources'] ) ? $stats['last_resources'] : array();
+		$urls      = array();
+
+		foreach ( $resources as $resource ) {
+			if ( ! is_array( $resource ) || $kind !== ( $resource['kind'] ?? '' ) ) {
+				continue;
+			}
+
+			$url = isset( $resource['url'] ) ? (string) $resource['url'] : '';
+
+			if ( '' !== $url ) {
+				$urls[] = $url;
+			}
+		}
+
+		$critical = array( '/wp-includes/', '/wp-content/themes/', 'jquery', 'wp-i18n', 'wp-hooks', 'wp-polyfill' );
+		$rejected = array();
+		$matched  = 0;
+
+		foreach ( $patterns as $pattern ) {
+			$regex = '#^' . str_replace( '\*', '.*', preg_quote( (string) $pattern, '#' ) ) . '$#i';
+			$hits  = array();
+
+			foreach ( $urls as $url ) {
+				if ( preg_match( $regex, $url ) ) {
+					$hits[] = $url;
+				}
+			}
+
+			$matched += count( $hits );
+
+			if ( array() === $hits ) {
+				continue;
+			}
+
+			$reason = '';
+
+			foreach ( $hits as $hit ) {
+				foreach ( $critical as $needle ) {
+					if ( false !== stripos( $hit, $needle ) ) {
+						$reason = __( 'скрипт темы, jQuery или ядра WordPress', 'modern-minify' );
+						break 2;
+					}
+				}
+			}
+
+			if ( '' === $reason && count( $hits ) > 1 ) {
+				/* translators: %d: number of matched files. */
+				$reason = sprintf( __( 'шаблон накрывает %d файла — укажите полный путь', 'modern-minify' ), count( $hits ) );
+			}
+
+			if ( '' !== $reason ) {
+				$rejected[] = array(
+					'pattern' => (string) $pattern,
+					'reason'  => $reason,
+				);
+			}
+		}
+
+		return array(
+			'ok'       => array() === $rejected,
+			'rejected' => $rejected,
+			'matched'  => $matched,
+		);
+	}
+
+	/**
+	 * Reads the home page and reports whether jQuery is still a normal script.
+	 *
+	 * A post-write sanity check: if the page had jQuery before the change and
+	 * lost it after, the caller rolls the settings back. A page that cannot be
+	 * fetched is not treated as broken — an unreachable site must not lock the
+	 * screen.
+	 *
+	 * @return array{jquery:bool,scripts:int,styles:int,checked:bool}
+	 */
+	private static function page_health(): array {
+		$out = array( 'jquery' => false, 'scripts' => 0, 'styles' => 0, 'checked' => false );
+
+		if ( ! function_exists( 'wp_remote_get' ) || ! function_exists( 'home_url' ) ) {
+			return $out;
+		}
+
+		$url = add_query_arg( 'mmf_health', time(), home_url( '/' ) );
+		$res = wp_remote_get( $url, array( 'timeout' => 8, 'redirection' => 3 ) );
+
+		if ( is_wp_error( $res ) || 200 !== (int) wp_remote_retrieve_response_code( $res ) ) {
+			return $out;
+		}
+
+		$body = (string) wp_remote_retrieve_body( $res );
+
+		if ( '' === $body ) {
+			return $out;
+		}
+
+		// `\ssrc=` and not just `src=`: the delayed-script transform moves the
+		// URL into `data-mmf-rsrc`, and a loose pattern would read that as a
+		// live script, hiding exactly the breakage this check looks for.
+		preg_match_all( '#<script[^>]*\ssrc=[\'"]([^\'"]+)[\'"]#i', $body, $scripts );
+		preg_match_all( '#<link[^>]+rel=[\'"]stylesheet[\'"]#i', $body, $styles );
+
+		foreach ( (array) $scripts[1] as $src ) {
+			if ( false !== stripos( (string) $src, 'jquery' ) ) {
+				$out['jquery'] = true;
+				break;
+			}
+		}
+
+		$out['scripts'] = count( (array) $scripts[1] );
+		$out['styles']  = count( (array) $styles[0] );
+		$out['checked'] = true;
+
+		return $out;
+	}
+
+	/**
 	 * Adds the checked advice patterns to the chosen list.
 	 *
 	 * Read-only analysis becomes a change only here, on an explicit POST from
@@ -1617,14 +1751,70 @@ final class MMF_Admin {
 
 		$added = array_values( array_unique( $added ) );
 
+		// Nothing is written before the patterns are checked against the page
+		// they will affect: a wildcard that covers the theme's own script must
+		// be refused here, not discovered by visitors.
+		$guard = self::advice_guard( $added, 'js' );
+
+		if ( ! $guard['ok'] ) {
+			$lines = array();
+
+			foreach ( $guard['rejected'] as $item ) {
+				$lines[] = $item['pattern'] . ' — ' . $item['reason'];
+			}
+
+			$reason = implode( '; ', $lines );
+			MMF_Stats::record_action( sprintf( /* translators: %s: reasons. */ __( 'Шаблоны не применены: %s', 'modern-minify' ), $reason ) );
+
+			wp_safe_redirect(
+				add_query_arg(
+					array(
+						'page'            => self::PAGE,
+						'tab'             => 'advisor',
+						'mmf-toast'       => 'advice-blocked',
+						'mmf-toast-nonce' => wp_create_nonce( self::TOAST_NONCE ),
+					),
+					admin_url( 'options-general.php' )
+				)
+			);
+			exit;
+		}
+
 		// Only checked patterns are added, and an existing entry is never duplicated.
 		$current = (array) MMF_Config::get( $target, array() );
 		$merged  = array_values( array_unique( array_merge( $current, $added ) ) );
 		$new     = count( $merged ) - count( $current );
 
 		if ( $new > 0 ) {
+			$before = self::page_health();
+
 			MMF_Config::update( array( $target => $merged ) );
 			$deleted = MMF_Cache::delete_all();
+
+			$after = self::page_health();
+
+			// The change is verified on the real home page. A page that had
+			// jQuery before and lost it after means the pattern took the site
+			// apart; the previous list is restored immediately.
+			if ( $before['checked'] && $after['checked'] && $before['jquery'] && ! $after['jquery'] ) {
+				MMF_Config::update( array( $target => $current ) );
+				MMF_Cache::delete_all();
+				MMF_Stats::record_action( __( 'Настройки отменены: после применения страница теряет jQuery. Шаблон слишком широкий.', 'modern-minify' ) );
+
+				wp_safe_redirect(
+					add_query_arg(
+						array(
+							'page'            => self::PAGE,
+							'tab'             => 'advisor',
+							'mmf-toast'       => 'advice-rolled-back',
+							'mmf-toast-nonce' => wp_create_nonce( self::TOAST_NONCE ),
+						),
+						admin_url( 'options-general.php' )
+					)
+				);
+				exit;
+			}
+
 			MMF_Stats::record_action( sprintf( __( 'Добавлено шаблонов в список: %1$d, кеш сброшен (удалено файлов: %2$d).', 'modern-minify' ), $new, (int) $deleted ) );
 		} else {
 			MMF_Stats::record_action( __( 'Выбранные шаблоны уже есть в списке.', 'modern-minify' ) );
@@ -2171,6 +2361,40 @@ final class MMF_Admin {
 
 		if ( '' === $pattern || ! in_array( $do, array( 'inline', 'async', 'exclude', 'merge' ), true ) ) {
 			wp_die( esc_html__( 'Некорректное действие.', 'modern-minify' ) );
+		}
+
+		// The advisor writes a pattern here, not a bare URL: the stored value is
+		// matched against the full address, so a scheme-less path or a full URL
+		// from the page would never match. Normalise both into `*<path>*`.
+		$path = (string) wp_parse_url( $pattern, PHP_URL_PATH );
+
+		if ( '' !== $path ) {
+			$pattern = $path;
+		}
+
+		$pattern = trim( $pattern, " \t\n\r\0\x0B*" );
+
+		if ( '' !== $pattern ) {
+			$pattern = '*' . $pattern . '*';
+		}
+
+		// Theme and core stylesheets are never loaded asynchronously: the page
+		// would lose its layout before the script wakes up.
+		if ( 'async' === $do && ( false !== stripos( $pattern, '/themes/' ) || false !== stripos( $pattern, '/wp-includes/' ) ) ) {
+			MMF_Stats::record_action( __( 'Асинхронная загрузка отклонена: это стиль темы или ядра.', 'modern-minify' ) );
+
+			wp_safe_redirect(
+				add_query_arg(
+					array(
+						'page'            => self::PAGE,
+						'tab'             => 'advisor',
+						'mmf-toast'       => 'css-action-blocked',
+						'mmf-toast-nonce' => wp_create_nonce( self::TOAST_NONCE ),
+					),
+					admin_url( 'options-general.php' )
+				)
+			);
+			exit;
 		}
 
 		$label = '';
