@@ -3010,7 +3010,8 @@ final class MMF_Admin {
 .mmf-wrap .mmf-panel .form-table textarea{min-height:96px}
 .mmf-wrap .mmf-card{background:var(--mmf-bg);border:1px solid var(--mmf-border);border-radius:var(--mmf-radius);padding:var(--mmf-gap-2);margin:0 0 var(--mmf-gap-2)}
 .mmf-wrap .mmf-section-title{margin:0 0 var(--mmf-gap);font-size:13px;line-height:1.4;text-transform:uppercase;letter-spacing:.04em;color:var(--mmf-muted);font-weight:600}
-.mmf-wrap .mmf-status-head{display:flex;align-items:center;gap:var(--mmf-gap);flex-wrap:wrap;margin:0 0 var(--mmf-gap-2)}
+.mmf-wrap .mmf-status-head{flex-wrap:wrap;align-items:center;column-gap:8px;row-gap:6px;display:flex;align-items:center;gap:var(--mmf-gap);flex-wrap:wrap;margin:0 0 var(--mmf-gap-2)}
+.mmf-wrap .mmf-status-head > :not(h2):not(.mmf-status){flex:1 1 100%;margin:6px 0 0}
 .mmf-wrap .mmf-status-head h2{margin:0}
 .mmf-wrap .mmf-status{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:999px;background:var(--mmf-ok-bg);color:var(--mmf-ok-fg);margin:0}
 .mmf-wrap .mmf-status__dot{width:8px;height:8px;border-radius:50%;background:var(--mmf-dot-on);flex:none}
@@ -3034,7 +3035,7 @@ final class MMF_Admin {
 .mmf-wrap .mmf-metric__value--warn{color:var(--mmf-warn-num)}
 .mmf-wrap .mmf-metric__value{margin:0;font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--mmf-fg);text-align:right}
 .mmf-wrap .mmf-actions{margin:var(--mmf-gap-2) 0 0}
-.mmf-toasts{position:fixed;right:24px;bottom:24px;top:auto;left:auto;z-index:100000;display:flex;flex-direction:column-reverse;gap:8px;width:min(420px,calc(100vw - 48px));max-width:420px;box-sizing:border-box}
+.mmf-toasts{position:fixed !important;right:24px !important;bottom:24px !important;top:auto !important;left:auto !important;z-index:100000;display:flex;flex-direction:column-reverse;gap:8px;width:min(420px,calc(100vw - 48px));max-width:420px;box-sizing:border-box}
 .mmf-toasts[hidden]{display:none}
 .mmf-toast{display:flex;gap:8px;align-items:flex-start;min-width:0;max-width:100%;box-sizing:border-box;background:var(--mmf-toast-bg,#fff);color:var(--mmf-toast-fg,#1d2327);border:1px solid var(--mmf-border,#c3c4c7);border-radius:var(--mmf-radius,8px);padding:12px 16px;box-shadow:0 8px 24px rgba(0,0,0,.18);font-size:13px;line-height:1.45}
 .mmf-toast--success{border-left:4px solid #00a32a}

@@ -9,9 +9,9 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Modern Minify 0.8.29\n"
+"Project-Id-Version: Modern Minify 0.8.30\n"
 "Report-Msgid-Bugs-To: https://github.com/Gnoztis/modern-minify/issues\n"
-"POT-Creation-Date: 2026-11-24T16:41:42+00:00\n"
+"POT-Creation-Date: 2026-11-24T16:50:00+00:00\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -656,7 +656,7 @@ msgstr ""
 msgid "defer на странице"
 msgstr ""
 
-#: includes/class-mmf-admin.php:875 includes/class-mmf-assets.php:950
+#: includes/class-mmf-admin.php:875 includes/class-mmf-assets.php:966
 msgid "применён"
 msgstr ""
 
@@ -1704,23 +1704,23 @@ msgstr ""
 msgid "Настройки не меняются, пока вы не нажмёте кнопку. Будут добавлены только отмеченные шаблоны."
 msgstr ""
 
-#: includes/class-mmf-admin.php:3596
+#: includes/class-mmf-admin.php:3597
 msgid "Очистить весь кеш минифицированных файлов, шрифтов и стилей?"
 msgstr ""
 
-#: includes/class-mmf-admin.php:3598
+#: includes/class-mmf-admin.php:3599
 msgid "Удалить все созданные WebP? Оригиналы останутся."
 msgstr ""
 
-#: includes/class-mmf-admin.php:3599
+#: includes/class-mmf-admin.php:3600
 msgid "Откладывать скрипты плагинов рискованно: проверьте страницу после сохранения."
 msgstr ""
 
-#: includes/class-mmf-admin.php:3601
+#: includes/class-mmf-admin.php:3602
 msgid "Пройти по пользователям и конвертировать их аватары? Это может занять время."
 msgstr ""
 
-#: includes/class-mmf-admin.php:3603
+#: includes/class-mmf-admin.php:3604
 msgid "Асинхронный CSS может дать вспышку неоформленного контента (FOUC). Проверьте первый экран."
 msgstr ""
 
@@ -1733,7 +1733,7 @@ msgstr ""
 msgid "локальный"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:404 includes/class-mmf-assets.php:926
+#: includes/class-mmf-advisor.php:404 includes/class-mmf-assets.php:942
 msgid "внешний"
 msgstr ""
 
@@ -1829,27 +1829,27 @@ msgstr ""
 msgid "собран в пакет"
 msgstr ""
 
-#: includes/class-mmf-assets.php:877
+#: includes/class-mmf-assets.php:893
 msgid "выключен"
 msgstr ""
 
-#: includes/class-mmf-assets.php:906
+#: includes/class-mmf-assets.php:922
 msgid "модуль"
 msgstr ""
 
-#: includes/class-mmf-assets.php:916
+#: includes/class-mmf-assets.php:932
 msgid "исключение"
 msgstr ""
 
-#: includes/class-mmf-assets.php:921
+#: includes/class-mmf-assets.php:937
 msgid "не откладывать"
 msgstr ""
 
-#: includes/class-mmf-assets.php:937
+#: includes/class-mmf-assets.php:953
 msgid "на странице нет внешних скриптов"
 msgstr ""
 
-#: includes/class-mmf-assets.php:944
+#: includes/class-mmf-assets.php:960
 msgid "не применён, исключены: %s"
 msgstr ""
 

@@ -786,6 +786,22 @@ final class MMF_Assets {
 			return true;
 		}
 
+		// The theme and the core are what drawing the page means: a theme script
+		// builds the markup the visitor sees, and jQuery is what most of those
+		// scripts run on. Deferring them left the owner's post cards without their
+		// icons, so they are never touched by this mode.
+		if ( '' !== $src ) {
+			$path = (string) wp_parse_url( $src, PHP_URL_PATH );
+
+			if ( false !== strpos( $path, '/wp-content/themes/' ) || false !== strpos( $path, '/wp-includes/' ) ) {
+				return true;
+			}
+
+			if ( 1 === preg_match( '#/jquery(?:-core|-migrate)?(?:\.min)?\.js$#i', $path ) ) {
+				return true;
+			}
+		}
+
 		$needle = '' !== $src ? $src : $id;
 
 		return '' !== $needle && self::matches( $needle, $settings['rocket_exclude'] ?? array() );
