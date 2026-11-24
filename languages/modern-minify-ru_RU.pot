@@ -9,9 +9,9 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Modern Minify 0.8.34\n"
+"Project-Id-Version: Modern Minify 0.8.35\n"
 "Report-Msgid-Bugs-To: https://github.com/Gnoztis/modern-minify/issues\n"
-"POT-Creation-Date: 2026-11-24T18:42:51+00:00\n"
+"POT-Creation-Date: 2026-11-24T18:56:12+00:00\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -333,7 +333,7 @@ msgid "Загружать эти CSS асинхронно"
 msgstr ""
 
 #: includes/class-mmf-admin.php:580
-msgid "По одному шаблону на строку, путь достаточно указать без хоста. Стили вставляются после DOMContentLoaded нашим инлайн-скриптом; возможен FOUC."
+msgid "По одному шаблону на строку, путь достаточно указать без хоста. Файл скачивается через preload и применяется, когда байты пришли: первая отрисовка его не ждёт."
 msgstr ""
 
 #: includes/class-mmf-admin.php:583
