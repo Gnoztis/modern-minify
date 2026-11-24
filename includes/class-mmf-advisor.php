@@ -323,6 +323,25 @@ final class MMF_Advisor {
 	 * @param string                $host  Host.
 	 * @param array<string,string>  $hosts Hosts with reason keys.
 	 */
+	/**
+	 * Whether a script is a known non-critical one: a counter, a pixel, a chat.
+	 *
+	 * Used as the allow-list of the whole-page mode: only these may be moved
+	 * out of the first paint, because everything else can interfere with the
+	 * theme, and the URL says nothing about that.
+	 *
+	 * @param string $url Script URL.
+	 */
+	public static function is_non_critical( string $url ): bool {
+		$host = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
+
+		if ( '' === $host ) {
+			return false;
+		}
+
+		return self::host_in( $host, self::NON_CRITICAL );
+	}
+
 	private static function host_in( string $host, array $hosts ): bool {
 		foreach ( array_keys( $hosts ) as $needle ) {
 			$needle = strtolower( (string) $needle );

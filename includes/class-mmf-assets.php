@@ -811,6 +811,22 @@ final class MMF_Assets {
 			}
 		}
 
+		// An inline block is the page's own glue: never move it.
+		if ( '' === $src ) {
+			return true;
+		}
+
+		// Only known non-critical scripts are deferred. The old rule was the
+		// opposite — defer everything that is not excluded — and it broke the
+		// theme twice: the page arrived without its own interface, and the owner
+		// saw a working site only after clicking something. A widget, a counter
+		// or a chat can wait; anything else cannot be judged from the URL alone,
+		// so it keeps loading normally.
+		if ( '' !== $src && class_exists( 'MMF_Advisor' ) ) {
+			return ! MMF_Advisor::is_non_critical( $src );
+		}
+
+
 		$needle = '' !== $src ? $src : $id;
 
 		return '' !== $needle && self::matches( $needle, $settings['rocket_exclude'] ?? array() );
@@ -1142,7 +1158,7 @@ final class MMF_Assets {
 
 			if ( ! $guard_printed ) {
 				$guard_printed = true;
-				$guard         = '<style id="mmf-fouc-guard">html{visibility:hidden}</style>';
+				$guard         = '<style id="mmf-fouc-guard">html{visibility:hidden;animation:mmf-reveal .01s linear 1.5s forwards}@keyframes mmf-reveal{to{visibility:visible}}</style>';
 			}
 
 			$theme_id = 'mmf-theme-preload-' . substr( md5( $href ), 0, 8 );
