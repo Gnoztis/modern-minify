@@ -365,6 +365,15 @@ final class MMF_Advisor {
 	public static function pattern( string $url ): string {
 		$host = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
 		$path = (string) wp_parse_url( $url, PHP_URL_PATH );
+		$self = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
+
+		// Our own files are matched by path: the host in a pattern breaks the
+		// moment the site moves to another domain, and the lists are about this
+		// site anyway. A foreign host stays in the pattern, because that is the
+		// only thing that identifies it.
+		if ( '' !== $host && '' !== $path && $host === $self ) {
+			return $path;
+		}
 
 		if ( '' !== $host ) {
 			return $host . $path;

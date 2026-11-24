@@ -558,7 +558,7 @@ final class MMF_Admin {
 			),
 			'inline_css_extra'       => array(
 				__( 'Встроить эти CSS-файлы', 'modern-minify' ),
-				__( 'Шаблоны путей через строку: выбранный файл встраивается в страницу, даже если больше общего порога.', 'modern-minify' ),
+				__( 'По одному шаблону на строку. Для файлов этого сайта достаточно пути: /wp-content/plugins/… — хост не нужен.', 'modern-minify' ),
 			),
 			'css_async_theme'        => array(
 				__( 'Загружать CSS темы асинхронно', 'modern-minify' ),
@@ -566,7 +566,7 @@ final class MMF_Admin {
 			),
 			'async_css'              => array(
 				__( 'Загружать эти CSS асинхронно', 'modern-minify' ),
-				__( 'Стили вставляются после DOMContentLoaded нашим инлайн-скриптом. Возможен FOUC; без nonce при CSP режим не применяется.', 'modern-minify' ),
+				__( 'По одному шаблону на строку, путь достаточно указать без хоста. Стили вставляются после DOMContentLoaded нашим инлайн-скриптом; возможен FOUC.', 'modern-minify' ),
 			),
 			'inline_css'             => array(
 				__( 'Встраивать небольшие CSS', 'modern-minify' ),

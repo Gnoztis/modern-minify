@@ -1626,6 +1626,23 @@ final class MMF_Assets {
 
 			$pattern = strtolower( trim( (string) $pattern ) );
 
+			// A stored pattern may name our own host, which breaks after a domain
+			// move and adds nothing: the lists describe this site. The host is
+			// stripped here, so old entries keep matching and new ones can be
+			// written as /wp-content/... . A foreign host stays.
+			if ( '' !== $pattern && preg_match( '#^https?://#', $pattern ) ) {
+				$p_host = strtolower( (string) wp_parse_url( $pattern, PHP_URL_HOST ) );
+				$s_host = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
+
+				if ( '' !== $p_host && $p_host === $s_host ) {
+					$p_path = (string) wp_parse_url( $pattern, PHP_URL_PATH );
+
+					if ( '' !== $p_path ) {
+						$pattern = $p_path;
+					}
+				}
+			}
+
 			if ( '' === $pattern ) {
 				continue;
 			}
