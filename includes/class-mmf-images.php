@@ -60,6 +60,13 @@ final class MMF_Images {
 	private static array $counted = array();
 
 	/**
+	 * Sidecar validity, memoised for the request: stat plus twelve bytes.
+	 *
+	 * @var array<string,bool>
+	 */
+	private static array $sidecar_ok = array();
+
+	/**
 	 * Registered the hooks.
 	 */
 	public static function register_hooks(): void {
@@ -162,6 +169,14 @@ final class MMF_Images {
 			return $metadata;
 		}
 
+		$mime = function_exists( 'get_post_mime_type' ) ? (string) get_post_mime_type( (int) $id ) : '';
+
+		if ( 'image/webp' === strtolower( $mime ) ) {
+			MMF_Stats::increment( 'image_webp_existing' );
+
+			return $metadata;
+		}
+
 		$file = isset( $metadata['file'] ) ? (string) $metadata['file'] : '';
 
 		if ( '' === $file ) {
@@ -238,15 +253,17 @@ final class MMF_Images {
 	public static function convert_file( string $path ): string {
 		$sidecar = self::sidecar( $path );
 
-		if ( is_file( $sidecar ) ) {
-			return 'exists';
-		}
-
 		if ( ! self::enabled() || ! is_file( $path ) || ! is_readable( $path ) ) {
 			return 'skipped';
 		}
 
 		$type = strtolower( (string) pathinfo( $path, PATHINFO_EXTENSION ) );
+
+		if ( 'webp' === $type ) {
+			MMF_Stats::increment( 'image_webp_existing' );
+
+			return 'already-webp';
+		}
 
 		if ( ! in_array( $type, array( 'jpg', 'jpeg', 'png' ), true ) ) {
 			return 'skipped';
@@ -266,6 +283,18 @@ final class MMF_Images {
 			return 'error';
 		}
 
+		$recreate = false;
+
+		if ( is_file( $sidecar ) ) {
+			if ( self::usable_sidecar( $path ) ) {
+				MMF_Stats::increment( 'image_reused' );
+
+				return 'reused';
+			}
+
+			$recreate = true;
+		}
+
 		$ok = self::write_sidecar( $path, $sidecar, $type );
 
 		if ( ! $ok ) {
@@ -280,6 +309,13 @@ final class MMF_Images {
 			MMF_Stats::increment( 'image_bigger' );
 
 			return 'bigger';
+		}
+
+		if ( $recreate ) {
+			self::$sidecar_ok = array();
+			MMF_Stats::increment( 'image_recreated' );
+
+			return 'recreated';
 		}
 
 		MMF_Stats::increment( 'image_created' );
@@ -433,6 +469,74 @@ final class MMF_Images {
 	}
 
 	/**
+	 * Whether a sidecar is valid and not older than the original.
+	 *
+	 * Cheap by design: one stat of each file and twelve bytes of the sidecar,
+	 * memoised per request. RIFF size is checked against the real file size, so
+	 * a truncated file with a plausible start is rejected.
+	 *
+	 * @param string $file Original path.
+	 */
+	public static function usable_sidecar( string $file ): bool {
+		$sidecar = self::sidecar( $file );
+		$key     = $sidecar . '|' . (string) @filemtime( $file ) . '|' . (string) @filemtime( $sidecar ) . '|' . (string) @filesize( $sidecar ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- a missing file is a false result.
+
+		if ( isset( self::$sidecar_ok[ $key ] ) ) {
+			return self::$sidecar_ok[ $key ];
+		}
+
+		$ok = false;
+
+		if ( is_file( $sidecar ) && is_file( $file ) ) {
+			$sidecar_mtime = @filemtime( $sidecar ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- reported as not usable.
+			$source_mtime  = @filemtime( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- reported as not usable.
+
+			if ( false !== $sidecar_mtime && false !== $source_mtime && $sidecar_mtime >= $source_mtime ) {
+				$ok = self::valid_header( $sidecar );
+			}
+		}
+
+		self::$sidecar_ok[ $key ] = $ok;
+
+		return $ok;
+	}
+
+	/**
+	 * RIFF/WEBP header check.
+	 *
+	 * @param string $sidecar Sidecar path.
+	 */
+	private static function valid_header( string $sidecar ): bool {
+		$size = @filesize( $sidecar ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- a missing file is invalid.
+
+		if ( false === $size || $size < 20 ) {
+			return false;
+		}
+
+		$handle = @fopen( $sidecar, 'rb' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- an unreadable file is invalid.
+
+		if ( ! $handle ) {
+			return false;
+		}
+
+		$head = (string) fread( $handle, 16 );
+		fclose( $handle );
+
+		if ( 16 !== strlen( $head ) || 'RIFF' !== substr( $head, 0, 4 ) || 'WEBP' !== substr( $head, 8, 4 ) ) {
+			return false;
+		}
+
+		$declared = unpack( 'V', substr( $head, 4, 4 ) );
+
+		if ( ! is_array( $declared ) || ! isset( $declared[1] ) ) {
+			return false;
+		}
+
+		// RIFF size excludes the first eight bytes; a truncated file lies about it.
+		return ( (int) $declared[1] + 8 ) <= (int) $size;
+	}
+
+	/**
 	 * Starts the output buffer when serving can change something.
 	 */
 	public static function maybe_buffer(): void {
@@ -546,7 +650,7 @@ final class MMF_Images {
 
 		$file = MMF_Assets::resolve_path( $url, $ext );
 
-		if ( '' === $file || ! is_file( self::sidecar( $file ) ) ) {
+		if ( '' === $file || ! self::usable_sidecar( $file ) ) {
 			return $url;
 		}
 

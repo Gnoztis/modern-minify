@@ -872,6 +872,9 @@ final class MMF_Admin {
 			__( 'Картинки WebP', 'modern-minify' ),
 			array(
 				__( 'Создано WebP', 'modern-minify' )        => (string) (int) $stats['image_created'],
+				__( 'Пересоздано WebP', 'modern-minify' )     => (string) (int) $stats['image_recreated'],
+				__( 'WebP уже был', 'modern-minify' )         => (string) (int) $stats['image_reused'],
+				__( 'Исходник уже WebP', 'modern-minify' )    => (string) (int) $stats['image_webp_existing'],
 				__( 'Отдано WebP', 'modern-minify' )         => (string) (int) $stats['image_served'],
 				__( 'Сэкономлено, КБ', 'modern-minify' )     => (string) (int) round( (int) $stats['image_saved'] / 1024 ),
 				__( 'Ошибок конвертации', 'modern-minify' )  => (string) (int) $stats['image_errors'],
