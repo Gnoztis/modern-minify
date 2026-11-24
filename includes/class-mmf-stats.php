@@ -93,6 +93,7 @@ final class MMF_Stats {
 			'last_external'      => array(),
 			'last_scripts'       => array(),
 			'last_resources'     => array(),
+			'last_bundles'       => array(),
 			'inline_merged'      => 0,
 			'merge_reasons'      => array(),
 			'last_defer'         => array( 'allowed' => false, 'reason' => '', 'blockers' => array() ),
@@ -126,6 +127,8 @@ final class MMF_Stats {
 				$known[ $key ] = self::sanitize_scripts( $value );
 			} elseif ( 'last_resources' === $key ) {
 				$known[ $key ] = self::sanitize_resources( $value );
+			} elseif ( 'last_bundles' === $key ) {
+				$known[ $key ] = self::sanitize_bundles( $value );
 			} elseif ( 'merge_reasons' === $key ) {
 				$known[ $key ] = self::sanitize_reasons( $value );
 			} elseif ( 'last_defer' === $key ) {
@@ -170,6 +173,11 @@ final class MMF_Stats {
 				continue;
 			}
 
+			if ( 'last_bundles' === $key ) {
+				$clean[ $key ] = self::sanitize_bundles( $count );
+				continue;
+			}
+
 			if ( 'merge_reasons' === $key ) {
 				$clean[ $key ] = self::sanitize_reasons( $count );
 				continue;
@@ -197,7 +205,7 @@ final class MMF_Stats {
 		}
 
 		foreach ( $clean as $key => $count ) {
-			if ( 'last_delayed' === $key || 'last_external' === $key || 'last_scripts' === $key || 'last_resources' === $key || 'last_defer' === $key || 'merge_reasons' === $key ) {
+			if ( 'last_delayed' === $key || 'last_external' === $key || 'last_scripts' === $key || 'last_resources' === $key || 'last_bundles' === $key || 'last_defer' === $key || 'merge_reasons' === $key ) {
 				// Snapshots of the last counted page, not running totals.
 				$stats[ $key ] = $count;
 				continue;
@@ -212,6 +220,44 @@ final class MMF_Stats {
 
 		// Not autoloaded: read once on the admin screen, never on a page view.
 		update_option( self::OPTION, $stats, false );
+	}
+
+	/**
+	 * Normalises bundle details recorded by the merge pass.
+	 *
+	 * @param mixed $value Raw value.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private static function sanitize_bundles( $value ): array {
+		$list = array();
+
+		foreach ( (array) $value as $entry ) {
+			if ( ! is_array( $entry ) || empty( $entry['url'] ) ) {
+				continue;
+			}
+
+			$files = array();
+
+			foreach ( (array) ( $entry['files'] ?? array() ) as $file ) {
+				if ( is_array( $file ) && isset( $file['url'] ) ) {
+					$files[] = array(
+						'url'  => mb_substr( esc_url_raw( (string) $file['url'] ), 0, 2000 ),
+						'size' => isset( $file['size'] ) ? max( 0, (int) $file['size'] ) : 0,
+					);
+				}
+			}
+
+			$list[] = array(
+				'url'    => mb_substr( esc_url_raw( (string) $entry['url'] ), 0, 2000 ),
+				'type'   => isset( $entry['type'] ) ? sanitize_key( (string) $entry['type'] ) : 'css',
+				'count'  => isset( $entry['count'] ) ? max( 0, (int) $entry['count'] ) : count( $files ),
+				'before' => isset( $entry['before'] ) ? max( 0, (int) $entry['before'] ) : 0,
+				'after'  => isset( $entry['after'] ) ? max( 0, (int) $entry['after'] ) : 0,
+				'files'  => $files,
+			);
+		}
+
+		return $list;
 	}
 
 	/**
@@ -268,6 +314,9 @@ final class MMF_Stats {
 
 			$list[] = array(
 				'kind'         => $kind,
+				'cache_url'    => isset( $entry['cache_url'] ) && is_string( $entry['cache_url'] ) ? mb_substr( esc_url_raw( $entry['cache_url'] ), 0, 2000 ) : '',
+				'action'       => isset( $entry['action'] ) && is_string( $entry['action'] ) ? sanitize_key( $entry['action'] ) : '',
+				'bytes_after'  => isset( $entry['bytes_after'] ) && is_numeric( $entry['bytes_after'] ) ? max( 0, (int) $entry['bytes_after'] ) : 0,
 				'url'          => mb_substr( $url, 0, 2000 ),
 				'name'         => isset( $entry['name'] ) && is_string( $entry['name'] ) ? mb_substr( sanitize_text_field( $entry['name'] ), 0, 200 ) : '',
 				'mode'         => $mode,

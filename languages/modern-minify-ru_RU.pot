@@ -9,9 +9,9 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Modern Minify 0.7.4\n"
+"Project-Id-Version: Modern Minify 0.7.5\n"
 "Report-Msgid-Bugs-To: https://github.com/Gnoztis/modern-minify/issues\n"
-"POT-Creation-Date: 2026-11-24T13:16:25+00:00\n"
+"POT-Creation-Date: 2026-11-24T13:23:34+00:00\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -628,7 +628,7 @@ msgstr ""
 msgid "defer на странице"
 msgstr ""
 
-#: includes/class-mmf-admin.php:838 includes/class-mmf-assets.php:858
+#: includes/class-mmf-admin.php:838 includes/class-mmf-assets.php:909
 msgid "применён"
 msgstr ""
 
@@ -768,7 +768,7 @@ msgstr ""
 msgid "Самый старый файл"
 msgstr ""
 
-#: includes/class-mmf-admin.php:920 includes/class-mmf-admin.php:2119
+#: includes/class-mmf-admin.php:920 includes/class-mmf-admin.php:2131
 msgid "—"
 msgstr ""
 
@@ -992,7 +992,7 @@ msgstr ""
 msgid "Скрипты в подвале"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1213 includes/class-mmf-admin.php:2130
+#: includes/class-mmf-admin.php:1213 includes/class-mmf-admin.php:2142
 msgid "Delay JS"
 msgstr ""
 
@@ -1180,7 +1180,7 @@ msgstr ""
 msgid "Стиль"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1971 includes/class-mmf-admin.php:2097
+#: includes/class-mmf-admin.php:1971
 msgid "Размер"
 msgstr ""
 
@@ -1329,135 +1329,168 @@ msgstr ""
 msgid "Ресурс"
 msgstr ""
 
-#: includes/class-mmf-admin.php:2117
+#: includes/class-mmf-admin.php:2097
+msgid "До → после"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2115
+msgid "файлов: %d"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2129
 msgid "добавить"
 msgstr ""
 
-#: includes/class-mmf-admin.php:2130
+#: includes/class-mmf-admin.php:2142
 msgid "Не откладывать (defer_skip)"
 msgstr ""
 
-#: includes/class-mmf-admin.php:2131
+#: includes/class-mmf-admin.php:2143
 msgid "Отсрочить выбранные"
 msgstr ""
 
-#: includes/class-mmf-admin.php:2134
+#: includes/class-mmf-admin.php:2146
 msgid "Настройки не меняются, пока вы не нажмёте кнопку. Будут добавлены только отмеченные шаблоны."
 msgstr ""
 
-#: includes/class-mmf-admin.php:2428
+#: includes/class-mmf-admin.php:2440
 msgid "Очистить весь кеш минифицированных файлов, шрифтов и стилей?"
 msgstr ""
 
-#: includes/class-mmf-admin.php:2430
+#: includes/class-mmf-admin.php:2442
 msgid "Удалить все созданные WebP? Оригиналы останутся."
 msgstr ""
 
-#: includes/class-mmf-advisor.php:314
+#. translators: 1: type, 2: count.
+#: includes/class-mmf-advisor.php:169
+msgid "пакет %1$s (%2$d файла)"
+msgstr ""
+
+#: includes/class-mmf-advisor.php:379
 msgid "локальный"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:315 includes/class-mmf-assets.php:834
+#: includes/class-mmf-advisor.php:380 includes/class-mmf-assets.php:885
 msgid "внешний"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:316
+#: includes/class-mmf-advisor.php:381
 msgid "внешний (исключение)"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:329
+#: includes/class-mmf-advisor.php:394
 msgid "можно отложить"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:330
+#: includes/class-mmf-advisor.php:395
 msgid "рискованно"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:331
+#: includes/class-mmf-advisor.php:396
 msgid "нельзя"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:332
+#: includes/class-mmf-advisor.php:397
 msgid "уже отложен"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:345
+#: includes/class-mmf-advisor.php:410
 msgid "счётчик аналитики, до отрисовки не нужен"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:346
+#: includes/class-mmf-advisor.php:411
 msgid "конверсионный пиксель, до отрисовки не нужен"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:347
+#: includes/class-mmf-advisor.php:412
 msgid "чат загружается по требованию, до отрисовки не нужен"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:348
+#: includes/class-mmf-advisor.php:413
 msgid "CSS блокирует отрисовку: его надо объединять, а не откладывать"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:349
+#: includes/class-mmf-advisor.php:414
 msgid "наш собственный ресурс, его режимом управляет плагин"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:350
+#: includes/class-mmf-advisor.php:415
 msgid "defer, async, Delay JS или Rocket уже применены"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:351
+#: includes/class-mmf-advisor.php:416
 msgid "это jQuery, от него зависят другие скрипты"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:352
+#: includes/class-mmf-advisor.php:417
 msgid "type=\"module\", порядок загрузки задаёт браузер"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:353
+#: includes/class-mmf-advisor.php:418
 msgid "после него инлайн-код, который может от него зависеть"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:354
+#: includes/class-mmf-advisor.php:419
 msgid "локальный скрипт темы или плагина: неизвестно, нужен ли он до отрисовки"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:355
+#: includes/class-mmf-advisor.php:420
 msgid "внешний скрипт, домен не из списка известных"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:356
+#: includes/class-mmf-advisor.php:421
 msgid "антиспам, капча или платёжный виджет: должен успеть до отправки формы"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:357
+#: includes/class-mmf-advisor.php:422
 msgid "CSS темы: формирует первый экран"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:358
+#: includes/class-mmf-advisor.php:423
 msgid "CSS плагина: влияние на первый экран неизвестно"
 msgstr ""
 
-#: includes/class-mmf-assets.php:785
+#: includes/class-mmf-advisor.php:424
+msgid "CSS не из темы и не из плагина: происхождение неизвестно"
+msgstr ""
+
+#: includes/class-mmf-advisor.php:425
+msgid "виджет/соцсеть: можно загрузить асинхронно, возможен FOUC"
+msgstr ""
+
+#: includes/class-mmf-advisor.php:426
+msgid "небольшой файл: встраивание убирает запрос"
+msgstr ""
+
+#: includes/class-mmf-advisor.php:427
+msgid "уже оптимизирован"
+msgstr ""
+
+#: includes/class-mmf-advisor.php:428
+msgid "собран в пакет"
+msgstr ""
+
+#: includes/class-mmf-assets.php:836
 msgid "выключен"
 msgstr ""
 
-#: includes/class-mmf-assets.php:814
+#: includes/class-mmf-assets.php:865
 msgid "модуль"
 msgstr ""
 
-#: includes/class-mmf-assets.php:824
+#: includes/class-mmf-assets.php:875
 msgid "исключение"
 msgstr ""
 
-#: includes/class-mmf-assets.php:829
+#: includes/class-mmf-assets.php:880
 msgid "не откладывать"
 msgstr ""
 
-#: includes/class-mmf-assets.php:845
+#: includes/class-mmf-assets.php:896
 msgid "на странице нет внешних скриптов"
 msgstr ""
 
-#: includes/class-mmf-assets.php:852
+#: includes/class-mmf-assets.php:903
 msgid "не применён, исключены: %s"
 msgstr ""
 

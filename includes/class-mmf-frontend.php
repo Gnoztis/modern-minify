@@ -262,6 +262,7 @@ final class MMF_Frontend {
 			$stats['last_css_after']  = (int) ( $assets['stats']['css_after'] ?? 0 );
 			$stats['last_scripts'] = is_array( $assets['stats']['last_scripts'] ?? null ) ? $assets['stats']['last_scripts'] : array();
 			$stats['last_resources'] = is_array( $assets['stats']['last_resources'] ?? null ) ? $assets['stats']['last_resources'] : array();
+			$stats['last_bundles']   = is_array( $assets['stats']['last_bundles'] ?? null ) ? $assets['stats']['last_bundles'] : array();
 			$stats['last_defer']   = is_array( $assets['stats']['last_defer'] ?? null ) ? $assets['stats']['last_defer'] : array();
 
 			// `get_avatar` runs while the page is rendered, before this buffer is

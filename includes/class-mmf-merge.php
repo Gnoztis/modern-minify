@@ -78,6 +78,7 @@ final class MMF_Merge {
 			'css_after'     => 0,
 			'inline_merged' => 0,
 			'merge_reasons' => array(),
+			'bundles_detail' => array(),
 		);
 
 		if ( '' === $html ) {
@@ -131,6 +132,7 @@ final class MMF_Merge {
 			}
 
 			$stats['bundles']       += 1;
+			$stats['bundles_detail'][] = (array) ( $bundle['detail'] ?? array() );
 			$stats['bundled_files'] += count( $group['items'] );
 			$stats['bundle_bytes']  += strlen( $bundle['content'] );
 
@@ -409,8 +411,9 @@ final class MMF_Merge {
 			return array();
 		}
 
-		$parts = array();
-		$total = 0;
+		$parts  = array();
+		$total  = 0;
+		$detail = array();
 
 		foreach ( $items as $item ) {
 			if ( isset( $item['inline'] ) ) {
@@ -435,7 +438,8 @@ final class MMF_Merge {
 					return array();
 				}
 
-				$parts[] = $minified;
+				$detail[] = array( 'url' => '', 'size' => strlen( $inline ) );
+				$parts[]  = $minified;
 
 				continue;
 			}
@@ -478,7 +482,8 @@ final class MMF_Merge {
 				return array();
 			}
 
-			$parts[] = $minified;
+			$detail[] = array( 'url' => $item['src'], 'size' => strlen( $source ) );
+			$parts[]  = $minified;
 		}
 
 		if ( count( $parts ) < 2 ) {
@@ -510,6 +515,14 @@ final class MMF_Merge {
 		return array(
 			'tag'     => $tag,
 			'content' => $content,
+			'detail'  => array(
+				'url'    => (string) ( $put['url'] ?? '' ),
+				'type'   => $type,
+				'count'  => count( $detail ),
+				'before' => array_sum( array_column( $detail, 'size' ) ),
+				'after'  => strlen( $content ),
+				'files'  => $detail,
+			),
 		);
 	}
 }

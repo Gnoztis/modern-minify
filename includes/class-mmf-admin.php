@@ -2094,7 +2094,7 @@ final class MMF_Admin {
 
 		echo '<div class="mmf-advisor-scroll"><table class="widefat mmf-advisor-table"><thead><tr>';
 		echo '<th scope="col">' . esc_html__( 'Ресурс', 'modern-minify' ) . '</th>';
-		echo '<th scope="col">' . esc_html__( 'Размер', 'modern-minify' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'До → после', 'modern-minify' ) . '</th>';
 		echo '<th scope="col">' . esc_html__( 'Вердикт', 'modern-minify' ) . '</th>';
 		echo '<th scope="col">' . esc_html__( 'Действие', 'modern-minify' ) . '</th>';
 		echo '</tr></thead><tbody>';
@@ -2103,11 +2103,23 @@ final class MMF_Admin {
 			$verdict = (string) $item['verdict'];
 			$reason  = MMF_Advisor::reason_label( (string) $item['reason'] );
 			$size    = (int) $item['size'] > 0 ? number_format( (float) ( $item['size'] / 1024 ), 1, '.', ' ' ) . ' КБ' : '—';
+			$after   = (int) ( $item['after'] ?? 0 );
+			$sizes   = $after > 0 && $after !== (int) $item['size'] ? $size . ' → ' . number_format( (float) ( $after / 1024 ), 1, '.', ' ' ) . ' КБ' : $size;
 			$source  = (string) ( $item['source'] ?? MMF_Advisor::LOCAL );
 
 			echo '<tr>';
 			echo '<td><span class="mmf-advisor__name">' . esc_html( (string) $item['name'] ) . '</span> <span class="mmf-advisor__path" title="' . esc_attr( (string) $item['url'] ) . '">' . esc_html( (string) $item['url'] ) . '</span>';
 			echo '<div class="mmf-advisor__badges"><span class="mmf-source mmf-source--' . esc_attr( $source ) . '">' . esc_html( MMF_Advisor::source_label( $source ) ) . '</span></div>';
+
+			if ( ! empty( $item['files'] ) ) {
+				echo '<details class="mmf-advisor__files"><summary>' . esc_html( sprintf( __( 'файлов: %d', 'modern-minify' ), count( (array) $item['files'] ) ) ) . '</summary><ul>';
+
+				foreach ( (array) $item['files'] as $file ) {
+					echo '<li>' . esc_html( (string) ( $file['name'] ?? $file['url'] ?? '' ) ) . '</li>';
+				}
+
+				echo '</ul></details>';
+			}
 			echo '<p class="mmf-advisor__reason" title="' . esc_attr( $reason ) . '">' . esc_html( $reason ) . '</p></td>';
 			echo '<td class="mmf-advisor__size">' . esc_html( $size ) . '</td>';
 			echo '<td><span class="mmf-verdict mmf-verdict--' . esc_attr( $verdict ) . '">' . esc_html( MMF_Advisor::verdict_label( $verdict ) ) . '</span><p class="mmf-advisor__reason" title="' . esc_attr( $reason ) . '">' . esc_html( $reason ) . '</p></td>';

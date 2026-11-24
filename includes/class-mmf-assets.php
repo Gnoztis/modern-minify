@@ -221,10 +221,38 @@ final class MMF_Assets {
 
 				if ( str_contains( $link_rel, 'stylesheet' ) ) {
 					$link_href = (string) ( $link_attrs['href'] ?? '' );
+
+					if ( MMF_Assets::has_attribute( (string) $token['raw'], 'data-mmf-bundle' ) ) {
+						/* A bundle is represented by its own row from the merge map. */
+					} else {
 					$link_file = self::resolve_path( $link_href, 'css' );
+
+					$final_tag  = (string) ( $result['tag'] ?? '' );
+					$cache_url  = '';
+					$after      = 0;
+					$action     = 'kept';
+
+					if ( '' === trim( $final_tag ) ) {
+						$action = 'removed';
+					} elseif ( str_starts_with( ltrim( $final_tag ), '<style' ) ) {
+						$action = 'inlined';
+						$after  = strlen( $final_tag );
+					} else {
+						$final_href = (string) ( MMF_Assets::attributes( $final_tag )['href'] ?? '' );
+
+						if ( str_contains( $final_href, '/mmf/' ) ) {
+							$cache_url = $final_href;
+							$cache_file = MMF_Cache::base_dir() . '/' . basename( (string) wp_parse_url( $final_href, PHP_URL_PATH ) );
+							$after      = is_file( $cache_file ) ? (int) filesize( $cache_file ) : 0;
+							$action     = 'minified';
+						}
+					}
 
 					$resources[] = array(
 						'kind'         => 'css',
+						'cache_url'    => $cache_url,
+						'action'       => $action,
+						'bytes_after'  => $after,
 						'url'          => $link_href,
 						'name'         => basename( (string) wp_parse_url( $link_href, PHP_URL_PATH ) ),
 						'mode'         => 'normal',
@@ -234,6 +262,7 @@ final class MMF_Assets {
 						'media'        => (string) ( $link_attrs['media'] ?? '' ),
 						'position'     => count( $resources ) + 1,
 					);
+					}
 				}
 
 				$out    .= $result['tag'];
@@ -291,9 +320,30 @@ final class MMF_Assets {
 						'position' => count( $scripts ) + 1,
 					);
 
+					$final_src = (string) ( $attrs['src'] ?? '' );
+					$after     = 0;
+					$cache_url = '';
+
+					if ( str_contains( $final_src, '/mmf/' ) ) {
+						$cache_url = $final_src;
+						$cache_file = MMF_Cache::base_dir() . '/' . basename( (string) wp_parse_url( $final_src, PHP_URL_PATH ) );
+						$after = is_file( $cache_file ) ? (int) filesize( $cache_file ) : 0;
+					} elseif ( 'inline' === (string) ( $result['mode'] ?? '' ) ) {
+						$after = strlen( $content );
+					}
+
+					$action = (string) ( $result['mode'] ?? 'normal' );
+
+					if ( 'normal' === $action ) {
+						$action = '' !== $cache_url ? 'minified' : 'kept';
+					}
+
 					$resources[] = array(
 						'kind'         => 'js',
 						'url'          => (string) ( $orig['src'] ?? ( $attrs['src'] ?? '' ) ),
+						'cache_url'    => $cache_url,
+						'action'       => $action,
+						'bytes_after'  => $after,
 						'name'         => (string) ( $result['name'] ?? 'inline' ),
 						'mode'         => (string) ( $result['mode'] ?? 'normal' ),
 						'module'       => str_contains( $type, 'module' ),
@@ -407,6 +457,7 @@ final class MMF_Assets {
 		$stats['external_report'] = MMF_External::report();
 		$stats['last_scripts']    = $scripts;
 		$stats['last_resources']  = $resources;
+		$stats['last_bundles']    = (array) ( $merge_stats['bundles_detail'] ?? array() );
 		$stats['last_defer']      = $defer_state;
 
 		return array(

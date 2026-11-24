@@ -45,6 +45,15 @@ final class MMF_Advisor {
 	 * validate a payment; delaying them breaks the action instead of speeding
 	 * the page up. Values are reason keys.
 	 */
+	public const NON_CRITICAL_CSS = array(
+		'jivo'         => 'chat',
+		'carrotquest'  => 'chat',
+		'talk-me'      => 'chat',
+		'vk.com'       => 'social',
+		'facebook.net' => 'social',
+		'hotjar.com'   => 'analytics',
+	);
+
 	public const CRITICAL_THIRD_PARTY = array(
 		'cleantalk.org'             => 'antispam',
 		'fd-cleantalk.org'          => 'antispam',
@@ -96,7 +105,7 @@ final class MMF_Advisor {
 	 * @param array<int,array<string,mixed>> $resources Resources from the stats.
 	 * @return array{items:array<int,array<string,mixed>>,blocking:int,deferable:int,bytes:int}
 	 */
-	public static function analyse( array $resources ): array {
+	public static function analyse( array $resources, array $bundles = array() ): array {
 		$items = array();
 
 		foreach ( $resources as $resource ) {
@@ -120,11 +129,54 @@ final class MMF_Advisor {
 				continue;
 			}
 
+			if ( 'css' === $kind ) {
+				$host = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
+
+				foreach ( self::NON_CRITICAL_CSS as $needle => $unused ) {
+					if ( str_contains( $host, $needle ) ) {
+						$resource['css_widget'] = true;
+					}
+				}
+
+				$limit = max( 0, (int) MMF_Config::get( 'inline_css_limit', 20 ) ) * 1024;
+
+				if ( (int) ( $resource['size'] ?? 0 ) > 0 && (int) $resource['size'] <= $limit ) {
+					$resource['css_inline'] = true;
+				}
+			}
+
 			$items[] = self::verdict( $resource );
 		}
 
 		$blocking  = 0;
 		$deferable = 0;
+
+		foreach ( $bundles as $bundle ) {
+			if ( ! is_array( $bundle ) || empty( $bundle['url'] ) ) {
+				continue;
+			}
+
+			$files = array();
+
+			foreach ( (array) ( $bundle['files'] ?? array() ) as $file ) {
+				if ( is_array( $file ) && isset( $file['url'] ) ) {
+					$files[] = array( 'name' => self::basename( (string) $file['url'] ), 'url' => (string) $file['url'], 'size' => (int) ( $file['size'] ?? 0 ) );
+				}
+			}
+
+			$items[] = array(
+				'url'      => '',
+				'name'     => sprintf( /* translators: 1: type, 2: count. */ __( 'пакет %1$s (%2$d файла)', 'modern-minify' ), 'css' === ( $bundle['type'] ?? '' ) ? 'CSS' : 'JS', (int) ( $bundle['count'] ?? count( $files ) ) ),
+				'size'     => (int) ( $bundle['before'] ?? 0 ),
+				'after'    => (int) ( $bundle['after'] ?? 0 ),
+				'verdict'  => self::DONE,
+				'reason'   => 'bundled',
+				'source'   => self::LOCAL,
+				'pattern'  => '',
+				'position' => 0,
+				'files'    => $files,
+			);
+		}
 		$bytes     = 0;
 
 		foreach ( $items as $item ) {
@@ -166,16 +218,26 @@ final class MMF_Advisor {
 			$reason  = 'already';
 		} elseif ( 'css' === $kind ) {
 			$path = strtolower( (string) wp_parse_url( $url, PHP_URL_PATH ) );
+			$acts = (string) ( $resource['action'] ?? '' );
 
-			if ( str_contains( $path, '/themes/' ) ) {
+			if ( in_array( $acts, array( 'bundled', 'inlined', 'removed' ), true ) ) {
+				$verdict = self::DONE;
+				$reason  = 'optimized';
+			} elseif ( str_contains( $path, '/themes/' ) ) {
 				$verdict = self::CANNOT;
 				$reason  = 'css-theme';
+			} elseif ( ! empty( $resource['css_widget'] ) ) {
+				$verdict = self::CAN;
+				$reason  = 'css-widget';
+			} elseif ( ! empty( $resource['css_inline'] ) ) {
+				$verdict = self::CAN;
+				$reason  = 'css-inline';
 			} elseif ( str_contains( $path, '/plugins/' ) ) {
 				$verdict = self::RISKY;
 				$reason  = 'css-plugin';
 			} else {
-				$verdict = self::CANNOT;
-				$reason  = 'css';
+				$verdict = self::RISKY;
+				$reason  = 'css-unknown';
 			}
 		} elseif ( false !== stripos( $url . ' ' . $name, 'jquery' ) ) {
 			$verdict = self::RISKY;
@@ -210,6 +272,9 @@ final class MMF_Advisor {
 			'url'      => $url,
 			'name'     => '' !== $name ? $name : self::basename( $url ),
 			'size'     => (int) ( $resource['size'] ?? 0 ),
+			'after'    => (int) ( $resource['bytes_after'] ?? 0 ),
+			'action'   => (string) ( $resource['action'] ?? '' ),
+			'files'    => array(),
 			'verdict'  => $verdict,
 			'reason'   => $reason,
 			'source'   => $source,
@@ -356,6 +421,11 @@ final class MMF_Advisor {
 			'third-party-critical' => __( 'антиспам, капча или платёжный виджет: должен успеть до отправки формы', 'modern-minify' ),
 			'css-theme'    => __( 'CSS темы: формирует первый экран', 'modern-minify' ),
 			'css-plugin'   => __( 'CSS плагина: влияние на первый экран неизвестно', 'modern-minify' ),
+			'css-unknown'  => __( 'CSS не из темы и не из плагина: происхождение неизвестно', 'modern-minify' ),
+			'css-widget'   => __( 'виджет/соцсеть: можно загрузить асинхронно, возможен FOUC', 'modern-minify' ),
+			'css-inline'   => __( 'небольшой файл: встраивание убирает запрос', 'modern-minify' ),
+			'optimized'    => __( 'уже оптимизирован', 'modern-minify' ),
+			'bundled'      => __( 'собран в пакет', 'modern-minify' ),
 		);
 
 		return $labels[ $reason ] ?? $reason;
