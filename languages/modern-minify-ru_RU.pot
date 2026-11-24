@@ -9,9 +9,9 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Modern Minify 0.8.42\n"
+"Project-Id-Version: Modern Minify 0.8.43\n"
 "Report-Msgid-Bugs-To: https://github.com/Gnoztis/modern-minify/issues\n"
-"POT-Creation-Date: 2026-11-24T21:17:52+00:00\n"
+"POT-Creation-Date: 2026-11-24T21:27:27+00:00\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -241,11 +241,11 @@ msgid "Локальные скрипты из head переезжают в ко�
 msgstr ""
 
 #: includes/class-mmf-admin.php:532
-msgid "Откладывать загрузку (Delay JS)"
+msgid "Откладывать загрузку (defer)"
 msgstr ""
 
 #: includes/class-mmf-admin.php:533
-msgid "Файлы, чьи URL совпали с шаблонами, не загружаются и не исполняются до первого взаимодействия посетителя. Пустой список — ничего не откладывается."
+msgid "Файлы, чьи URL совпали с шаблонами, получают атрибут defer: браузер исполняет их после разбора страницы, порядок сохраняется. Пустой список — ничего не откладывается."
 msgstr ""
 
 #: includes/class-mmf-admin.php:537
@@ -652,7 +652,7 @@ msgstr ""
 msgid "defer на странице"
 msgstr ""
 
-#: includes/class-mmf-admin.php:883 includes/class-mmf-assets.php:991
+#: includes/class-mmf-admin.php:883 includes/class-mmf-assets.php:992
 msgid "применён"
 msgstr ""
 
@@ -1726,7 +1726,7 @@ msgstr ""
 msgid "локальный"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:423 includes/class-mmf-assets.php:967
+#: includes/class-mmf-advisor.php:423 includes/class-mmf-assets.php:968
 msgid "внешний"
 msgstr ""
 
@@ -1822,27 +1822,27 @@ msgstr ""
 msgid "собран в пакет"
 msgstr ""
 
-#: includes/class-mmf-assets.php:918
+#: includes/class-mmf-assets.php:919
 msgid "выключен"
 msgstr ""
 
-#: includes/class-mmf-assets.php:947
+#: includes/class-mmf-assets.php:948
 msgid "модуль"
 msgstr ""
 
-#: includes/class-mmf-assets.php:957
+#: includes/class-mmf-assets.php:958
 msgid "исключение"
 msgstr ""
 
-#: includes/class-mmf-assets.php:962
+#: includes/class-mmf-assets.php:963
 msgid "не откладывать"
 msgstr ""
 
-#: includes/class-mmf-assets.php:978
+#: includes/class-mmf-assets.php:979
 msgid "на странице нет внешних скриптов"
 msgstr ""
 
-#: includes/class-mmf-assets.php:985
+#: includes/class-mmf-assets.php:986
 msgid "не применён, исключены: %s"
 msgstr ""
 

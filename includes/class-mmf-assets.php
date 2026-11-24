@@ -704,7 +704,8 @@ final class MMF_Assets {
 		// script never gets async/defer - the loader owns its timing.
 		if ( self::should_delay( $src, $settings ) ) {
 			$result['tag']             = self::delay_tag( $tag );
-			$result['delay']           = true;
+			// defer does not need a loader: nothing is left for it to find.
+		$result['delay']           = false;
 			$result['stats']['delayed'] = 1;
 			$result['mode']            = 'delayed';
 
@@ -1026,22 +1027,17 @@ final class MMF_Assets {
 	 *
 	 * @param string $tag Full tag.
 	 */
-	private static function delay_tag( string $tag ): string {
-		$attributes = self::attributes( $tag );
-		$src        = isset( $attributes['src'] ) ? (string) $attributes['src'] : '';
+		private static function delay_tag( string $tag ): string {
+		// The browser's own defer: order is kept, execution waits for the parse,
+		// and no loader of ours is involved. The previous placeholder plus loader
+		// broke execution order and could not be read from the page source.
+		$tag = self::remove_attribute( $tag, 'async' );
 
-		if ( '' === $src ) {
+		if ( self::has_attribute( $tag, 'defer' ) ) {
 			return $tag;
 		}
 
-		$tag = self::remove_attribute( $tag, 'src' );
-		$tag = self::remove_attribute( $tag, 'async' );
-		$tag = self::remove_attribute( $tag, 'defer' );
-		$tag = self::replace_attribute( $tag, 'type', 'text/plain' );
-		$tag = self::replace_attribute( $tag, 'data-mmf-src', $src );
-		$tag = self::replace_attribute( $tag, 'data-mmf-delay', '1' );
-
-		return $tag;
+		return (string) preg_replace( '/\s*\/?>$/', ' defer>', $tag, 1 );
 	}
 
 	/**
