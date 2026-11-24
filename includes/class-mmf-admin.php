@@ -216,7 +216,7 @@ final class MMF_Admin {
 			'javascript' => array( 'minify_js', 'merge_js', 'async_js', 'defer_js', 'defer_skip', 'exclude_js', 'move_scripts_to_footer' ),
 			'css'        => array( 'minify_css', 'merge_css', 'inline_css', 'inline_css_limit', 'remove_print_css', 'exclude_css' ),
 			'fonts'      => array( 'fonts_method', 'fawesome_method' ),
-			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_meta', 'remove_emoji' ),
+			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_generator', 'remove_emoji', 'ver_mode' ),
 			'advanced'   => array( 'cache_ttl', 'test_mode', 'debug' ),
 		);
 	}
@@ -304,13 +304,17 @@ final class MMF_Admin {
 				__( 'Не оптимизировать авторизованных', 'modern-minify' ),
 				__( 'Страницы пользователей, которые вошли на сайт, остаются исходными.', 'modern-minify' ),
 			),
-			'remove_meta'            => array(
-				__( 'Убирать лишние meta-теги', 'modern-minify' ),
-				__( 'Генератор и подобные теги; появится в версии 0.4.1.', 'modern-minify' ),
+			'remove_generator'       => array(
+				__( 'Убирать версию WordPress из head и фида', 'modern-minify' ),
+				__( 'Удаляет meta name="generator" и generator-тег RSS: версия в исходном коде подсказывает, какие уязвимости применимы.', 'modern-minify' ),
 			),
 			'remove_emoji'           => array(
 				__( 'Убирать emoji-скрипты', 'modern-minify' ),
-				__( 'Скрипты ядра для emoji; появится в версии 0.4.1.', 'modern-minify' ),
+				__( 'Снимает скрипт и стили emoji ядра на страницах сайта; админка не затрагивается.', 'modern-minify' ),
+			),
+			'ver_mode'               => array(
+				__( 'Параметр ver в URL своих файлов', 'modern-minify' ),
+				__( 'Хеш не раскрывает версию и сбрасывает кеш при изменении файла; удаление экономит запрос, но после обновления браузер может держать старый файл до конца кеша. У внешних файлов параметр всегда удаляется.', 'modern-minify' ),
 			),
 			'cache_ttl'              => array(
 				__( 'Срок жизни кеша, дней', 'modern-minify' ),
@@ -342,6 +346,11 @@ final class MMF_Admin {
 			'fawesome_method' => array(
 				'off'    => __( 'Оставить как есть', 'modern-minify' ),
 				'inline' => __( 'Встроить CSS в страницу', 'modern-minify' ),
+			),
+			'ver_mode'        => array(
+				'hash'   => __( 'Заменить на хеш содержимого', 'modern-minify' ),
+				'remove' => __( 'Удалить параметр', 'modern-minify' ),
+				'keep'   => __( 'Не трогать', 'modern-minify' ),
 			),
 		);
 	}

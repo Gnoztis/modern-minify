@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Modern Minify
  * Description:       Минификация CSS, JS и HTML, асинхронная загрузка файлов и обработка Google Fonts.
- * Version:           0.3.0
+ * Version:           0.3.1
  * Requires at least: 7.0
  * Tested up to:      7.1
  * Requires PHP:      8.0
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'MMF_VERSION', '0.3.0' );
+define( 'MMF_VERSION', '0.3.1' );
 define( 'MMF_PLUGIN_FILE', __FILE__ );
 define( 'MMF_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MMF_URL', plugin_dir_url( __FILE__ ) );
@@ -36,6 +36,7 @@ require_once MMF_DIR . 'includes/class-mmf-stats.php';
 require_once MMF_DIR . 'includes/class-mmf-conflicts.php';
 require_once MMF_DIR . 'includes/class-mmf-notices.php';
 require_once MMF_DIR . 'includes/class-mmf-frontend.php';
+require_once MMF_DIR . 'includes/class-mmf-version-hide.php';
 require_once MMF_DIR . 'includes/class-mmf-admin.php';
 require_once MMF_DIR . 'includes/class-mmf-admin-bar.php';
 require_once MMF_DIR . 'includes/class-mmf-github-updater.php';
@@ -52,6 +53,7 @@ function mmf_bootstrap(): void {
 	MMF_Admin_Bar::register_hooks();
 	MMF_Notices::register_hooks();
 	MMF_Frontend::instance()->register_hooks();
+	MMF_Version_Hide::register_hooks();
 
 	if ( class_exists( 'MMF_GitHub_Updater' ) ) {
 		( new MMF_GitHub_Updater() )->register_hooks();

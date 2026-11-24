@@ -39,8 +39,11 @@ final class MMF_Config {
 	 * 3: the font method vocabulary changed (`inherit`/`inline`/`async`/`exclude`
 	 *    became `off`/`swap`/`local`); an unknown value falls back to `off`,
 	 *    which is the safe direction - nothing is touched.
+	 * 4: `remove_meta` became `remove_generator` (the generator tag only) and the
+	 *    `ver_mode` choice arrived; the old key is ignored and the new fields
+	 *    take their defaults, which hide the version.
 	 */
-	public const SCHEMA = 3;
+	public const SCHEMA = 4;
 
 	/**
 	 * Upper bound of one exclusion list, in entries.
@@ -147,13 +150,24 @@ final class MMF_Config {
 				'type'    => 'bool',
 				'default' => false,
 			),
-			'remove_meta'            => array(
+			// Version hiding is a security feature, not cosmetics: the WordPress
+			// version in a URL or a meta tag tells an attacker which known
+			// vulnerabilities apply. Both are on by default for that reason.
+			'remove_generator'       => array(
 				'type'    => 'bool',
-				'default' => false,
+				'default' => true,
 			),
 			'remove_emoji'           => array(
 				'type'    => 'bool',
-				'default' => false,
+				'default' => true,
+			),
+			// What happens to the `ver` query parameter of the site's own assets:
+			// `hash` replaces it with a short content hash (cache busting without
+			// the version), `remove` drops it, `keep` does nothing.
+			'ver_mode'               => array(
+				'type'    => 'choice',
+				'default' => 'hash',
+				'choices' => array( 'hash', 'remove', 'keep' ),
 			),
 			// Inline blocks: minifying `<script>` and `<style>` bodies. An
 			// individual switch because this is the change that breaks themes most

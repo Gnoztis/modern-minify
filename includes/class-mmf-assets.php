@@ -588,10 +588,14 @@ final class MMF_Assets {
 	 * Resolves a URL to a readable file of the given type inside the WordPress
 	 * tree, or an empty string.
 	 *
+	 * Public because the version hiding reads the file a `script_loader_src` or
+	 * `style_loader_src` URL points at: both paths must resolve a URL the same
+	 * way, or a file would be hashed from one copy and served from another.
+	 *
 	 * @param string $url  URL from the tag.
 	 * @param string $type Expected extension: `js` or `css`.
 	 */
-	private static function resolve_path( string $url, string $type ): string {
+	public static function resolve_path( string $url, string $type ): string {
 		$url = trim( html_entity_decode( $url, ENT_QUOTES, 'UTF-8' ) );
 
 		if ( '' === $url || str_starts_with( $url, '#' ) ) {
