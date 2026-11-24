@@ -305,7 +305,7 @@ final class MMF_External {
 			// absolute CDN URLs are kept so the icons and the text still render,
 			// and the owner sees the warning.
 			$font_warning = 1 === preg_match( '/url\([^)]*\.(woff2?|ttf|otf|eot)([?#][^)]*)?\)/i', $body );
-			$body         = MMF_Fonts::absolutize_urls( $url, $body );
+			$body         = MMF_Fonts::absolutize_urls( $url, $body, true );
 		}
 
 		$hash = MMF_Cache::hash( $body, $type );

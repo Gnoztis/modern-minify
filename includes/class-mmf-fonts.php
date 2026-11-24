@@ -92,6 +92,30 @@ final class MMF_Fonts {
 	private static array $memo = array();
 
 	/**
+	 * Original font URL to local URL, for `<link rel="preload">` rewriting.
+	 *
+	 * @var array<string,string>
+	 */
+	private static array $url_map = array();
+
+	/**
+	 * Drops the per-request memo and the URL map.
+	 */
+	public static function reset(): void {
+		self::$memo    = array();
+		self::$url_map = array();
+	}
+
+	/**
+	 * Font URLs that were moved into the cache during this request.
+	 *
+	 * @return array<string,string>
+	 */
+	public static function url_map(): array {
+		return self::$url_map;
+	}
+
+	/**
 	 * Rewrites one `<link>` tag.
 	 *
 	 * Returns the tag to print, whether this handler owned it, and counters.
@@ -339,6 +363,10 @@ final class MMF_Fonts {
 
 		$css = str_replace( array_keys( $replacements ), array_values( $replacements ), $css );
 
+		if ( array() !== $replacements ) {
+			self::$url_map = array_merge( self::$url_map, $replacements );
+		}
+
 		if ( ! MMF_Cache::write_file( $css_name, $css ) ) {
 			self::$memo[ $href ] = '';
 
@@ -432,16 +460,29 @@ final class MMF_Fonts {
 	/**
 	 * Rewrites relative `url()` references in a stylesheet to absolute ones.
 	 *
-	 * Public because a localised external stylesheet needs the same treatment:
-	 * its font files stay on the original host.
+	 * The base is the ORIGINAL location of the stylesheet, never the cache. A
+	 * stylesheet moved to `uploads/mmf/` must not make the browser look for its
+	 * fonts next to the cache: `url(../fonts/x.woff2)` in
+	 * `themes/x/assets/css/style.css` becomes
+	 * `https://site/wp-content/themes/x/assets/fonts/x.woff2`, and the theme's
+	 * own preload of that font keeps matching.
 	 *
-	 * @param string $base Stylesheet URL.
-	 * @param string $css  Stylesheet body.
+	 * Absolute URLs are left exactly as they are - a URL that already resolves
+	 * is not "fixed". A root-relative URL resolves against the site origin, so
+	 * it is kept by default; only a stylesheet from another origin
+	 * (`$rebase_root`) needs it turned into an absolute URL of that origin.
+	 *
+	 * Public because a localised external stylesheet and the merge pass need
+	 * the same treatment: their font files live on the original host.
+	 *
+	 * @param string $base        Stylesheet URL.
+	 * @param string $css         Stylesheet body.
+	 * @param bool   $rebase_root Rebase root-relative URLs against the base origin.
 	 */
-	public static function absolutize_urls( string $base, string $css ): string {
+	public static function absolutize_urls( string $base, string $css, bool $rebase_root = false ): string {
 		$rewritten = preg_replace_callback(
 			'/url\(\s*([\'"]?)([^\'")]+)\1\s*\)/i',
-			static function ( $match ) use ( $base ) {
+			static function ( $match ) use ( $base, $rebase_root ) {
 				$url = trim( $match[2] );
 
 				if ( '' === $url || str_starts_with( $url, 'data:' ) || str_starts_with( $url, '#' ) ) {
@@ -453,6 +494,11 @@ final class MMF_Fonts {
 				}
 
 				if ( 1 === preg_match( '~^[a-z][a-z0-9+.-]*:~i', $url ) ) {
+					return $match[0];
+				}
+
+				// Already rooted at the site origin: it resolves from anywhere.
+				if ( str_starts_with( $url, '/' ) && ! $rebase_root ) {
 					return $match[0];
 				}
 
@@ -522,8 +568,19 @@ final class MMF_Fonts {
 		$path = '/' . implode( '/', $segments ) . ( $trailing ? '/' : '' );
 
 		$origin = self::origin( $url );
+		$clean  = '' === $origin ? $path : $origin . $path;
 
-		return '' === $origin ? $path : $origin . $path;
+		// A font URL may carry a cache-busting query and an IE fragment
+		// (`font.woff?v=1#iefix`); dropping either breaks the reference.
+		if ( isset( $parts['query'] ) && '' !== (string) $parts['query'] ) {
+			$clean .= '?' . $parts['query'];
+		}
+
+		if ( isset( $parts['fragment'] ) && '' !== (string) $parts['fragment'] ) {
+			$clean .= '#' . $parts['fragment'];
+		}
+
+		return $clean;
 	}
 
 	/**

@@ -50,8 +50,11 @@ final class MMF_Config {
 	 *    default because it defers every script.
 	 * 8: bundling limits and external defer (`defer_external`, `merge_max_files`,
 	 *    `merge_max_size`); bundling stays off and external defer stays off.
+	 * 9: the master switch is gone (an active plugin is an enabled plugin),
+	 *    Google Fonts default to `local`, and gravatar replacement is on by
+	 *    default (`disable_gravatar`).
 	 */
-	public const SCHEMA = 8;
+	public const SCHEMA = 9;
 
 	/**
 	 * Upper bound of one exclusion list, in entries.
@@ -78,11 +81,6 @@ final class MMF_Config {
 	 */
 	public static function fields(): array {
 		return array(
-			// Master switch: an off plugin touches nothing.
-			'enabled'                => array(
-				'type'    => 'bool',
-				'default' => false,
-			),
 			// What is minified.
 			'minify_js'              => array(
 				'type'    => 'bool',
@@ -261,7 +259,7 @@ final class MMF_Config {
 			// downloads the stylesheet and the font files into the cache.
 			'fonts_method'           => array(
 				'type'    => 'choice',
-				'default' => 'off',
+				'default' => 'local',
 				'choices' => array( 'off', 'swap', 'local' ),
 			),
 			// Font Awesome: `off` keeps the tag, `inline` replaces the stylesheet
@@ -270,6 +268,13 @@ final class MMF_Config {
 				'type'    => 'choice',
 				'default' => 'off',
 				'choices' => array( 'off', 'inline' ),
+			),
+			// Avatars: a gravatar URL sends the visitor's IP and a hash of their
+			// address to a third party, so a local inline SVG is served instead.
+			// On by default; the admin screen and outgoing mail are untouched.
+			'disable_gravatar'       => array(
+				'type'    => 'bool',
+				'default' => true,
 			),
 			// Test mode: the pipeline runs only for administrators, so the site
 			// owner can look at the result on the live site without risking
@@ -316,8 +321,17 @@ final class MMF_Config {
 	 */
 	public static function all(): array {
 		if ( null === self::$cache ) {
-			$stored      = get_option( self::OPTION, array() );
-			self::$cache = self::prepare( is_array( $stored ) ? $stored : array() );
+			$stored = get_option( self::OPTION, array() );
+			$stored = is_array( $stored ) ? $stored : array();
+
+			// Schema 9 made `local` the default for Google Fonts. A stored `off`
+			// from an older schema is the old default, not a deliberate choice,
+			// so it is migrated once; a value saved after the upgrade stays.
+			if ( (int) ( $stored['schema'] ?? 0 ) < self::SCHEMA && 'off' === ( $stored['fonts_method'] ?? '' ) ) {
+				$stored['fonts_method'] = 'local';
+			}
+
+			self::$cache = self::prepare( $stored );
 		}
 
 		return self::$cache;
@@ -338,13 +352,6 @@ final class MMF_Config {
 		$settings = self::all();
 
 		return array_key_exists( $key, $settings ) ? $settings[ $key ] : $fallback;
-	}
-
-	/**
-	 * Whether the plugin is switched on.
-	 */
-	public static function is_enabled(): bool {
-		return (bool) self::get( 'enabled', false );
 	}
 
 	/**

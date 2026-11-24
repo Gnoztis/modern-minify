@@ -55,6 +55,7 @@ final class MMF_Stats {
 			'delayed'            => 0,
 			'last_delayed'       => 0,
 			'rocket'             => 0,
+			'gravatar'           => 0,
 			'bundles'            => 0,
 			'bundled_files'      => 0,
 			'bundle_bytes'       => 0,

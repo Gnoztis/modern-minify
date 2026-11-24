@@ -43,12 +43,48 @@ final class MMF_Admin {
 	private const RESET_NONCE = 'mmf_reset_cache';
 
 	/**
+	 * Nonce action of the test-mode switch in the admin bar.
+	 */
+	public const TEST_NONCE = 'mmf_toggle_test_mode';
+
+	/**
 	 * Attaches the screen.
 	 */
 	public static function register_hooks(): void {
 		add_action( 'admin_menu', array( __CLASS__, 'register_page' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue' ) );
 		add_action( 'admin_init', array( __CLASS__, 'handle_reset' ) );
+		add_action( 'admin_init', array( __CLASS__, 'handle_toggle_test' ) );
+	}
+
+	/**
+	 * Toggles the test mode from the admin bar.
+	 *
+	 * A GET request with a nonce, like the cache reset: it changes one checkbox
+	 * and returns to the page the admin came from.
+	 */
+	public static function handle_toggle_test(): void {
+		if ( ! isset( $_GET['mmf-toggle-test'] ) ) {
+			return;
+		}
+
+		if ( ! current_user_can( self::CAPABILITY ) ) {
+			return;
+		}
+
+		check_admin_referer( self::TEST_NONCE );
+
+		$current = (bool) MMF_Config::get( 'test_mode' );
+		MMF_Config::update( array( 'test_mode' => ! $current ) );
+
+		$redirect = function_exists( 'wp_get_referer' ) ? wp_get_referer() : false;
+
+		if ( ! is_string( $redirect ) || '' === $redirect ) {
+			$redirect = admin_url( 'options-general.php?page=' . self::PAGE );
+		}
+
+		wp_safe_redirect( $redirect );
+		exit;
 	}
 
 	/**
@@ -133,7 +169,6 @@ final class MMF_Admin {
 		$tab = self::current_tab();
 
 		echo '<div class="wrap mmf-wrap">';
-		echo '<h1>' . esc_html__( 'Modern Minify', 'modern-minify' ) . '</h1>';
 
 		self::render_notices();
 
@@ -176,18 +211,13 @@ final class MMF_Admin {
 			echo '</tbody></table>';
 
 			if ( 'advanced' === $slug ) {
-				self::render_external_note();
+				self::render_external_exclusions();
 			}
 
 			echo '</div>';
 		}
 		submit_button();
 		echo '</form>';
-
-		if ( 'advanced' === $tab ) {
-			self::render_cache_path();
-		}
-
 		echo '</div>';
 	}
 
@@ -217,12 +247,12 @@ final class MMF_Admin {
 	 */
 	public static function tab_fields(): array {
 		return array(
-			'status'     => array( 'enabled' ),
+			'status'     => array(),
 			'javascript' => array( 'minify_js', 'merge_js', 'async_js', 'defer_js', 'defer_external', 'defer_skip', 'exclude_js', 'move_scripts_to_footer', 'delay_js', 'delay_js_exclude', 'delay_js_timeout', 'rocket_mode', 'rocket_exclude' ),
 			'css'        => array( 'minify_css', 'merge_css', 'inline_css', 'inline_css_limit', 'remove_print_css', 'exclude_css' ),
 			'fonts'      => array( 'fonts_method', 'fawesome_method' ),
 			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_generator', 'remove_emoji', 'ver_mode' ),
-			'advanced'   => array( 'cache_ttl', 'test_mode', 'debug', 'external_mode', 'external_max_size', 'external_exclude', 'merge_max_files', 'merge_max_size' ),
+			'advanced'   => array( 'cache_ttl', 'test_mode', 'debug', 'external_mode', 'external_max_size', 'merge_max_files', 'merge_max_size', 'disable_gravatar' ),
 		);
 	}
 
@@ -233,17 +263,13 @@ final class MMF_Admin {
 	 */
 	public static function field_meta(): array {
 		return array(
-			'enabled'                => array(
-				__( 'Оптимизация включена', 'modern-minify' ),
-				__( 'Выключенный плагин не трогает ни одной страницы.', 'modern-minify' ),
-			),
 			'minify_js'              => array(
 				__( 'Минифицировать JavaScript', 'modern-minify' ),
 				__( 'Локальные файлы сжимаются в кеш, адрес в теге заменяется.', 'modern-minify' ),
 			),
 			'merge_js'               => array(
 				__( 'Объединять JS-файлы', 'modern-minify' ),
-				__( 'Объединение в этом выпуске не выполняется: настройка сохранена для следующего.', 'modern-minify' ),
+				__( 'Только рядом стоящие локальные файлы без async/defer/module; при ошибке теги остаются как были. На HTTP/2 чаще вредит — проверяйте замером.', 'modern-minify' ),
 			),
 			'async_js'               => array(
 				__( 'Шаблоны для async', 'modern-minify' ),
@@ -303,7 +329,7 @@ final class MMF_Admin {
 			),
 			'merge_css'              => array(
 				__( 'Объединять CSS-файлы', 'modern-minify' ),
-				__( 'Объединение в этом выпуске не выполняется: настройка сохранена для следующего.', 'modern-minify' ),
+				__( 'Только рядом стоящие локальные файлы с одинаковым media; print не объединяется. На HTTP/2 чаще вредит — проверяйте замером.', 'modern-minify' ),
 			),
 			'inline_css'             => array(
 				__( 'Встраивать небольшие CSS', 'modern-minify' ),
@@ -368,6 +394,10 @@ final class MMF_Admin {
 			'external_mode'          => array(
 				__( 'Внешние файлы', 'modern-minify' ),
 				__( 'Локально — скачать в кеш и отдавать со своего домена; не трогать; удалить теги (по умолчанию выключено, потому что ломает функциональность).', 'modern-minify' ),
+			),
+			'disable_gravatar'       => array(
+				__( 'Заменять граватары локальной заглушкой', 'modern-minify' ),
+				__( 'Аватары заменяются локальной заглушкой, письма и админка не затрагиваются.', 'modern-minify' ),
 			),
 			'external_max_size'      => array(
 				__( 'Предел размера внешнего файла, МиБ', 'modern-minify' ),
@@ -501,56 +531,77 @@ final class MMF_Admin {
 	}
 
 	/**
-	 * Prints the status panel: counters, cache state and the reset link.
+	 * Prints the status panel: state, enabled features, four grouped counters,
+	 * the disk cache and the reset link.
 	 */
 	private static function render_status(): void {
 		$stats = MMF_Stats::all();
 		$cache = MMF_Cache::stats();
 
 		echo '<h2>' . esc_html__( 'Состояние', 'modern-minify' ) . '</h2>';
-		echo '<p class="mmf-status ' . ( MMF_Config::is_enabled() ? 'mmf-status--on' : 'mmf-status--off' ) . '">';
-		echo MMF_Config::is_enabled() ? esc_html__( 'оптимизация включена', 'modern-minify' ) : esc_html__( 'оптимизация выключена', 'modern-minify' );
-		echo '</p>';
+		echo '<p class="mmf-status mmf-status--on">' . esc_html__( 'плагин активен', 'modern-minify' ) . '</p>';
 
-		echo '<table class="widefat striped mmf-status-table"><tbody>';
+		self::render_features();
 
-		$rows = array(
-			__( 'Страниц обработано', 'modern-minify' )   => (string) (int) $stats['pages'],
-			__( 'Файлов минифицировано', 'modern-minify' ) => (string) (int) $stats['files'],
-			__( 'Инлайн-блоков сжато', 'modern-minify' )   => (string) (int) $stats['inline'],
-			__( 'Скриптов отложено', 'modern-minify' )     => (string) (int) $stats['defer'],
-			__( 'Скриптов async', 'modern-minify' )        => (string) (int) $stats['async'],
-			__( 'Скриптов перенесено в подвал', 'modern-minify' ) => (string) (int) $stats['moved'],
-			__( 'Скриптов отложено, всего', 'modern-minify' ) => (string) (int) $stats['delayed'],
-			__( 'Отложено на последней учтённой странице', 'modern-minify' ) => (string) (int) $stats['last_delayed'],
-			__( 'Отложено Rocket-режимом', 'modern-minify' ) => (string) (int) $stats['rocket'],
-			__( 'Пакетов собрано', 'modern-minify' )      => (string) (int) $stats['bundles'],
-			__( 'Файлов в пакетах', 'modern-minify' )     => (string) (int) $stats['bundled_files'],
-			__( 'Запросов сэкономлено', 'modern-minify' ) => (string) max( 0, (int) $stats['bundled_files'] - (int) $stats['bundles'] ),
-			__( 'Размер пакетов, КБ', 'modern-minify' )    => (string) (int) round( (int) $stats['bundle_bytes'] / 1024 ),
-			__( 'Внешних файлов локализовано', 'modern-minify' ) => (string) (int) $stats['external_localized'],
-			__( 'Внешних оставлено', 'modern-minify' )     => (string) (int) $stats['external_kept'],
-			__( 'Внешних не удалось скачать', 'modern-minify' ) => (string) (int) $stats['external_failed'],
-			__( 'Внешних тегов удалено', 'modern-minify' ) => (string) (int) $stats['external_removed'],
-			__( 'Предупреждений о шрифтах', 'modern-minify' ) => (string) (int) $stats['font_warnings'],
-			__( 'Ошибок обработки', 'modern-minify' )      => (string) (int) $stats['failed'],
-			__( 'Файлов в кеше', 'modern-minify' )         => (string) (int) $cache['files'],
-			__( 'Размер кеша', 'modern-minify' )           => size_format( (int) $cache['size'] ),
-			__( 'Кеш обновлён', 'modern-minify' )          => $cache['updated'] > 0 ? (string) wp_date( 'Y-m-d H:i:s', (int) $cache['updated'] ) : __( 'ещё не было', 'modern-minify' ),
+		echo '<div class="mmf-status-columns">';
+
+		self::status_group(
+			__( 'Страницы и файлы', 'modern-minify' ),
+			array(
+				__( 'Страниц обработано', 'modern-minify' )    => (string) (int) $stats['pages'],
+				__( 'Файлов минифицировано', 'modern-minify' ) => (string) (int) $stats['files'],
+				__( 'Инлайн-блоков сжато', 'modern-minify' )   => (string) (int) $stats['inline'],
+				__( 'Ошибок обработки', 'modern-minify' )       => (string) (int) $stats['failed'],
+			)
 		);
 
-		foreach ( $rows as $label => $number ) {
-			echo '<tr><td>' . esc_html( (string) $label ) . '</td><td>' . esc_html( $number ) . '</td></tr>';
-		}
+		self::status_group(
+			__( 'Отложенная загрузка', 'modern-minify' ),
+			array(
+				__( 'Скриптов defer', 'modern-minify' )        => (string) (int) $stats['defer'],
+				__( 'Скриптов async', 'modern-minify' )        => (string) (int) $stats['async'],
+				__( 'Перенесено в подвал', 'modern-minify' )   => (string) (int) $stats['moved'],
+				__( 'Delay JS, всего', 'modern-minify' )       => (string) (int) $stats['delayed'],
+				__( 'Delay JS на последней странице', 'modern-minify' ) => (string) (int) $stats['last_delayed'],
+				__( 'Rocket-режимом', 'modern-minify' )        => (string) (int) $stats['rocket'],
+				__( 'Пакетов собрано', 'modern-minify' )       => (string) (int) $stats['bundles'],
+				__( 'Файлов в пакетах', 'modern-minify' )      => (string) (int) $stats['bundled_files'],
+				__( 'Запросов сэкономлено', 'modern-minify' )  => (string) max( 0, (int) $stats['bundled_files'] - (int) $stats['bundles'] ),
+				__( 'Размер пакетов, КБ', 'modern-minify' )     => (string) (int) round( (int) $stats['bundle_bytes'] / 1024 ),
+			)
+		);
 
-		echo '</tbody></table>';
+		self::status_group(
+			__( 'Внешние файлы', 'modern-minify' ),
+			array(
+				__( 'Локализовано', 'modern-minify' )             => (string) (int) $stats['external_localized'],
+				__( 'Оставлено внешними', 'modern-minify' )       => (string) (int) $stats['external_kept'],
+				__( 'Не удалось скачать', 'modern-minify' )       => (string) (int) $stats['external_failed'],
+				__( 'Тегов удалено', 'modern-minify' )            => (string) (int) $stats['external_removed'],
+				__( 'Предупреждений о шрифтах', 'modern-minify' ) => (string) (int) $stats['font_warnings'],
+				__( 'Аватаров заменено', 'modern-minify' )        => (string) (int) $stats['gravatar'],
+			)
+		);
+
+		self::status_group(
+			__( 'Кеш и ошибки', 'modern-minify' ),
+			array(
+				__( 'Файлов в кеше', 'modern-minify' )      => (string) (int) $cache['files'],
+				__( 'Размер кеша', 'modern-minify' )        => size_format( (int) $cache['size'] ),
+				__( 'Кеш обновлён', 'modern-minify' )       => $cache['updated'] > 0 ? (string) wp_date( 'Y-m-d H:i:s', (int) $cache['updated'] ) : __( 'ещё не было', 'modern-minify' ),
+				__( 'Каталог', 'modern-minify' )            => (string) $cache['dir'],
+				__( 'Доступен для записи', 'modern-minify' ) => $cache['writable'] ? __( 'да', 'modern-minify' ) : __( 'нет', 'modern-minify' ),
+			)
+		);
+
+		echo '</div>';
 
 		self::render_external_report( $stats );
 
 		printf(
 			'<p class="description">%s %s</p>',
 			esc_html__( 'Счётчики накопительные и записываются не чаще раза в минуту.', 'modern-minify' ),
-			esc_html__( 'Кеш можно очистить в любой момент.', 'modern-minify' )
+			esc_html__( 'Кеш очищается только вручную: файлы с прежними именами остаются, чтобы страницы из кеша не запрашивали удалённые файлы.', 'modern-minify' )
 		);
 
 		$reset_url = wp_nonce_url(
@@ -565,6 +616,124 @@ final class MMF_Admin {
 		);
 
 		echo '<p class="mmf-actions"><a class="button mmf-reset" href="' . esc_url( $reset_url ) . '">' . esc_html__( 'Сбросить кеш', 'modern-minify' ) . '</a></p>';
+	}
+
+	/**
+	 * One card of the status grid.
+	 *
+	 * @param string               $title Card title.
+	 * @param array<string,string> $rows  Label to value.
+	 */
+	private static function status_group( string $title, array $rows ): void {
+		echo '<section class="mmf-status-card"><h3>' . esc_html( $title ) . '</h3>';
+		echo '<table class="widefat striped mmf-status-table"><tbody>';
+
+		foreach ( $rows as $label => $value ) {
+			echo '<tr><td>' . esc_html( (string) $label ) . '</td><td>' . esc_html( (string) $value ) . '</td></tr>';
+		}
+
+		echo '</tbody></table></section>';
+	}
+
+	/**
+	 * Lists what the plugin is currently doing, instead of a master switch.
+	 */
+	private static function render_features(): void {
+		$features = array();
+
+		if ( MMF_Config::get( 'minify_html' ) ) {
+			$features[] = __( 'HTML сжимается', 'modern-minify' );
+		}
+
+		$js = array();
+
+		if ( MMF_Config::get( 'minify_js' ) ) {
+			$js[] = __( 'минификация', 'modern-minify' );
+		}
+
+		if ( MMF_Config::get( 'merge_js' ) ) {
+			$js[] = __( 'пакеты', 'modern-minify' );
+		}
+
+		if ( MMF_Config::get( 'defer_js' ) ) {
+			$js[] = 'defer';
+		}
+
+		if ( MMF_Config::get( 'defer_external' ) ) {
+			$js[] = 'defer external';
+		}
+
+		if ( MMF_Config::get( 'rocket_mode' ) ) {
+			$js[] = 'Rocket';
+		}
+
+		$delay = MMF_Config::get( 'delay_js', array() );
+
+		if ( is_array( $delay ) && array() !== $delay ) {
+			$js[] = 'Delay JS';
+		}
+
+		if ( array() !== $js ) {
+			$features[] = __( 'JavaScript', 'modern-minify' ) . ' — ' . implode( ', ', $js );
+		}
+
+		$css = array();
+
+		if ( MMF_Config::get( 'minify_css' ) ) {
+			$css[] = __( 'минификация', 'modern-minify' );
+		}
+
+		if ( MMF_Config::get( 'merge_css' ) ) {
+			$css[] = __( 'пакеты', 'modern-minify' );
+		}
+
+		if ( MMF_Config::get( 'inline_css' ) ) {
+			$css[] = __( 'встраивание', 'modern-minify' );
+		}
+
+		if ( array() !== $css ) {
+			$features[] = __( 'CSS', 'modern-minify' ) . ' — ' . implode( ', ', $css );
+		}
+
+		$fonts = strtolower( (string) MMF_Config::get( 'fonts_method', 'off' ) );
+
+		if ( 'local' === $fonts ) {
+			$features[] = __( 'Google Fonts локально', 'modern-minify' );
+		} elseif ( 'swap' === $fonts ) {
+			$features[] = __( 'Google Fonts: display=swap', 'modern-minify' );
+		}
+
+		if ( 'inline' === strtolower( (string) MMF_Config::get( 'fawesome_method', 'off' ) ) ) {
+			$features[] = __( 'Font Awesome инлайном', 'modern-minify' );
+		}
+
+		if ( MMF_External::MODE_LOCAL === MMF_External::mode( MMF_Config::all() ) ) {
+			$features[] = __( 'внешние файлы локально', 'modern-minify' );
+		}
+
+		if ( MMF_Config::get( 'remove_generator' ) ) {
+			$features[] = __( 'без версии WordPress', 'modern-minify' );
+		}
+
+		if ( MMF_Config::get( 'remove_emoji' ) ) {
+			$features[] = __( 'без emoji-скриптов', 'modern-minify' );
+		}
+
+		if ( MMF_Config::get( 'disable_gravatar' ) ) {
+			$features[] = __( 'граватары локально', 'modern-minify' );
+		}
+
+		if ( MMF_Config::get( 'test_mode' ) ) {
+			$features[] = __( 'тестовый режим', 'modern-minify' );
+		}
+
+		echo '<ul class="mmf-features">';
+
+		foreach ( $features as $feature ) {
+			echo '<li>' . esc_html( (string) $feature ) . '</li>';
+		}
+
+		echo '</ul>';
 	}
 
 	/**
@@ -619,32 +788,81 @@ final class MMF_Admin {
 	}
 
 	/**
-	 * Prints the built-in exclusion list on the advanced tab.
+	 * Prints the external exclusion table: built-in hosts with a reason, and the
+	 * editable user list.
 	 */
-	private static function render_external_note(): void {
-		echo '<h2>' . esc_html__( 'Внешние файлы: встроенный список исключений', 'modern-minify' ) . '</h2>';
-		echo '<p class="description">' . esc_html__( 'Эти хосты не локализуются: их скрипты сверяют домен в Referer или Origin, и локальная копия ломает виджет. Список расширяется фильтром mmf_external_excluded.', 'modern-minify' ) . '</p>';
-		echo '<ul class="mmf-excludes">';
+	private static function render_external_exclusions(): void {
+		$current = MMF_Config::get( 'external_exclude', array() );
+		$current = is_array( $current ) ? $current : array();
+
+		echo '<h2>' . esc_html__( 'Внешние файлы: исключения', 'modern-minify' ) . '</h2>';
+		echo '<p class="description">' . esc_html__( 'Хосты ниже не локализуются: их скрипты сверяют домен в Referer или Origin, и локальная копия ломает виджет.', 'modern-minify' ) . '</p>';
+
+		echo '<table class="widefat striped mmf-status-table"><thead><tr>';
+		echo '<th>' . esc_html__( 'Хост', 'modern-minify' ) . '</th>';
+		echo '<th>' . esc_html__( 'Причина', 'modern-minify' ) . '</th>';
+		echo '<th>' . esc_html__( 'Оставить внешним', 'modern-minify' ) . '</th>';
+		echo '</tr></thead><tbody>';
+
+		$reasons = self::external_reasons();
 
 		foreach ( MMF_External::DEFAULT_EXCLUDES as $needle ) {
-			echo '<li><code>' . esc_html( (string) $needle ) . '</code></li>';
+			$needle = (string) $needle;
+			$reason = isset( $reasons[ $needle ] ) ? $reasons[ $needle ] : __( 'Привязан к домену сайта.', 'modern-minify' );
+
+			echo '<tr><td><code>' . esc_html( $needle ) . '</code></td>';
+			echo '<td>' . esc_html( $reason ) . '</td>';
+			echo '<td><input type="checkbox" checked="checked" disabled="disabled" /></td></tr>';
 		}
 
-		echo '</ul>';
+		echo '</tbody></table>';
+
+		echo '<h2>' . esc_html__( 'Дополнительные исключения', 'modern-minify' ) . '</h2>';
+		echo '<p class="description">' . esc_html__( 'Хост или часть URL на строку. Снимите «оставить внешним» — строка очистится при сохранении.', 'modern-minify' ) . '</p>';
+
+		echo '<table class="widefat striped mmf-status-table mmf-user-excludes"><thead><tr>';
+		echo '<th>' . esc_html__( 'Хост или часть URL', 'modern-minify' ) . '</th>';
+		echo '<th>' . esc_html__( 'Оставить внешним', 'modern-minify' ) . '</th>';
+		echo '</tr></thead><tbody>';
+
+		$rows   = array_values( array_map( 'strval', $current ) );
+		$rows[] = '';
+
+		foreach ( $rows as $row ) {
+			echo '<tr class="mmf-exclude-row"><td>';
+			echo '<input type="text" class="regular-text code" name="mmf_settings[external_exclude][]" value="' . esc_attr( $row ) . '" />';
+			echo '</td><td><input type="checkbox" class="mmf-exclude-keep" checked="checked" /></td></tr>';
+		}
+
+		echo '</tbody></table>';
 	}
 
 	/**
-	 * Prints the cache path on the advanced tab.
+	 * Why each built-in host stays external.
+	 *
+	 * @return array<string,string>
 	 */
-	private static function render_cache_path(): void {
-		$cache = MMF_Cache::stats();
-
-		echo '<h2>' . esc_html__( 'Кеш на диске', 'modern-minify' ) . '</h2>';
-		echo '<table class="widefat striped"><tbody>';
-		echo '<tr><td>' . esc_html__( 'Каталог', 'modern-minify' ) . '</td><td><code>' . esc_html( (string) $cache['dir'] ) . '</code></td></tr>';
-		echo '<tr><td>' . esc_html__( 'URL', 'modern-minify' ) . '</td><td><code>' . esc_html( (string) $cache['url'] ) . '</code></td></tr>';
-		echo '<tr><td>' . esc_html__( 'Доступен для записи', 'modern-minify' ) . '</td><td>' . ( $cache['writable'] ? esc_html__( 'да', 'modern-minify' ) : esc_html__( 'нет', 'modern-minify' ) ) . '</td></tr>';
-		echo '</tbody></table>';
+	private static function external_reasons(): array {
+		return array(
+			'maps.googleapis.com'      => __( 'Карты: ключ сверяется с Referer.', 'modern-minify' ),
+			'maps.google.com'          => __( 'Карты: ключ сверяется с Referer.', 'modern-minify' ),
+			'maps.yandex'              => __( 'Карты: ключ сверяется с Referer.', 'modern-minify' ),
+			'api-maps.yandex'          => __( 'Карты: ключ сверяется с Referer.', 'modern-minify' ),
+			'api.mapbox.com'           => __( 'Карты: токен привязан к домену.', 'modern-minify' ),
+			'api.2gis'                 => __( 'Карты: ключ привязан к домену.', 'modern-minify' ),
+			'recaptcha'                => __( 'Капча: виджет проверяет Origin.', 'modern-minify' ),
+			'hcaptcha.com'             => __( 'Капча: виджет проверяет Origin.', 'modern-minify' ),
+			'challenges.cloudflare.com' => __( 'Капча: виджет проверяет Origin.', 'modern-minify' ),
+			'turnstile'                => __( 'Капча: виджет проверяет Origin.', 'modern-minify' ),
+			'js.stripe.com'            => __( 'Платёжный виджет: зарегистрирован для одного домена.', 'modern-minify' ),
+			'checkout.stripe.com'      => __( 'Платёжный виджет: зарегистрирован для одного домена.', 'modern-minify' ),
+			'paypal.com/sdk'           => __( 'Платёжный виджет: зарегистрирован для одного домена.', 'modern-minify' ),
+			'paypalobjects.com'        => __( 'Платёжный виджет: зарегистрирован для одного домена.', 'modern-minify' ),
+			'checkout.qiwi.com'        => __( 'Платёжный виджет: зарегистрирован для одного домена.', 'modern-minify' ),
+			'securepay.tinkoff'        => __( 'Платёжный виджет: зарегистрирован для одного домена.', 'modern-minify' ),
+			'yookassa'                 => __( 'Платёжный виджет: зарегистрирован для одного домена.', 'modern-minify' ),
+			'money.yandex'             => __( 'Платёжный виджет: зарегистрирован для одного домена.', 'modern-minify' ),
+		);
 	}
 
 	/**
@@ -652,7 +870,7 @@ final class MMF_Admin {
 	 */
 	private static function render_notices(): void {
 		if ( isset( $_GET['settings-updated'] ) ) {
-			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Настройки сохранены. Кеш очищен, файлы будут собраны заново.', 'modern-minify' ) . '</p></div>';
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Настройки сохранены.', 'modern-minify' ) . '</p></div>';
 		}
 
 		if ( isset( $_GET['mmf-reset'] ) ) {
@@ -726,22 +944,34 @@ final class MMF_Admin {
 	private static function inline_css(): string {
 		return '.mmf-wrap .mmf-tabs{margin-bottom:16px}'
 			. '.mmf-wrap .mmf-panel .form-table th{width:260px}'
-			. '.mmf-wrap .mmf-status{display:inline-block;padding:3px 10px;border-radius:3px;background:#f0f0f1}'
-			. '.mmf-wrap .mmf-status--on{background:#edfaef;color:#0a6b1f}'
-			. '.mmf-wrap .mmf-status--off{background:#fcf0f1;color:#8a1111}'
-			. '.mmf-wrap .mmf-status-table{margin:12px 0;max-width:640px}'
-			. '.mmf-wrap .mmf-excludes{display:flex;flex-wrap:wrap;gap:4px 18px;margin:8px 0 0;padding:0;list-style:none}'
-			. '.mmf-wrap .mmf-actions{margin-top:16px}';
+			. '.mmf-wrap .mmf-status{display:inline-block;padding:3px 10px;border-radius:3px;background:#edfaef;color:#0a6b1f}'
+			. '.mmf-wrap .mmf-status-table{margin:0 0 12px;max-width:100%}'
+			. '.mmf-wrap .mmf-status-table td:last-child{text-align:right;white-space:nowrap}'
+			. '.mmf-wrap .mmf-status-table td:first-child{width:60%}'
+			. '.mmf-wrap .mmf-features{display:flex;flex-wrap:wrap;gap:4px 18px;margin:8px 0 16px;padding:0;list-style:none}'
+			. '.mmf-wrap .mmf-features li{background:#f0f0f1;border-radius:3px;padding:2px 8px}'
+			. '.mmf-wrap .mmf-status-columns{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;align-items:start;max-width:1180px}'
+			. '.mmf-wrap .mmf-status-card h3{margin:12px 0 6px;font-size:14px}'
+			. '.mmf-wrap .mmf-status-card code{word-break:break-all}'
+			. '.mmf-wrap .mmf-actions{margin-top:16px}'
+			. '@media (max-width:900px){.mmf-wrap .mmf-status-columns{grid-template-columns:1fr}}';
 	}
 
 	/**
-	 * The one behaviour the screen needs: confirm before wiping the cache.
+	 * The screen's behaviour: confirm before wiping the cache, and let a row of
+	 * the exclusion table be dropped by unchecking its switch.
 	 */
 	private static function inline_js(): string {
 		$prompt = (string) wp_json_encode( __( 'Очистить весь кеш минифицированных файлов, шрифтов и стилей?', 'modern-minify' ) );
 
 		return '(function(){var links=document.querySelectorAll(".mmf-reset");'
 			. 'for(var i=0;i<links.length;i++){links[i].addEventListener("click",function(event){'
-			. 'if(!window.confirm(' . $prompt . ')){event.preventDefault();}});}})();';
+			. 'if(!window.confirm(' . $prompt . ')){event.preventDefault();}});}'
+			. 'var rows=document.querySelectorAll(".mmf-exclude-row");'
+			. 'for(var j=0;j<rows.length;j++){(function(row){'
+			. 'var box=row.querySelector(".mmf-exclude-keep"),input=row.querySelector("input[type=text]");'
+			. 'if(!box||!input){return}'
+			. 'box.addEventListener("change",function(){if(!box.checked){input.value="";}});'
+			. '})(rows[j]);}})();';
 	}
 }

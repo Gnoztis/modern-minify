@@ -89,55 +89,20 @@ final class MMF_Cache {
 	public static function register_hooks(): void {
 		add_action( self::CRON_HOOK, array( __CLASS__, 'cleanup' ) );
 
-		add_action( 'upgrader_process_complete', array( __CLASS__, 'purge_on_upgrade' ), 10, 2 );
-		add_action( 'switch_theme', array( __CLASS__, 'purge_on_theme_switch' ) );
-		add_action( 'update_option_mmf_settings', array( __CLASS__, 'purge_on_settings_save' ) );
-		add_action( 'add_option_mmf_settings', array( __CLASS__, 'purge_on_settings_save' ) );
+		// Deliberately no purge on plugin update, theme switch or settings save.
+		// Cached files are content-addressed: a new version or a new setting
+		// produces new names, so old files are simply unreferenced and the daily
+		// cleanup removes them. Deleting them instead would break pages that are
+		// still served from a reverse-proxy or browser cache with the old URLs -
+		// those pages would request files that no longer exist. Manual reset and
+		// uninstall are the only paths that delete files.
 	}
 
-	/**
-	 * Purges the cache after a plugin, theme or core update.
-	 *
-	 * @param mixed $upgrader Upgrader instance, not used.
-	 * @param mixed $options  Update context: `action` and `type`.
+	/*
+	 * There is intentionally no purge-on-update, purge-on-theme-switch or
+	 * purge-on-settings-save here. See the comment in `register_hooks()`: those
+	 * purges deleted files that pages still cached elsewhere were pointing at.
 	 */
-	public static function purge_on_upgrade( $upgrader = null, $options = null ): void {
-		unset( $upgrader );
-
-		if ( ! is_array( $options ) ) {
-			return;
-		}
-
-		$action = isset( $options['action'] ) && is_string( $options['action'] ) ? $options['action'] : '';
-		$type   = isset( $options['type'] ) && is_string( $options['type'] ) ? $options['type'] : '';
-
-		if ( ! in_array( $action, array( 'update', 'install' ), true ) ) {
-			return;
-		}
-
-		if ( ! in_array( $type, array( 'plugin', 'theme', 'core', 'translation' ), true ) ) {
-			return;
-		}
-
-		self::delete_all();
-	}
-
-	/**
-	 * Purges the cache when the theme changes.
-	 */
-	public static function purge_on_theme_switch(): void {
-		self::delete_all();
-	}
-
-	/**
-	 * Purges the cache when the settings are saved.
-	 *
-	 * The settings decide what is minified and how, so every file built under
-	 * the previous rules is obsolete.
-	 */
-	public static function purge_on_settings_save(): void {
-		self::delete_all();
-	}
 
 	/**
 	 * Activation: creates the folder and schedules the daily cleanup.

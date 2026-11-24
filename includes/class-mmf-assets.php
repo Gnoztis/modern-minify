@@ -80,6 +80,7 @@ final class MMF_Assets {
 		$settings = is_array( $settings ) ? $settings : array();
 
 		MMF_External::reset();
+		MMF_Fonts::reset();
 
 		if ( '' === $html ) {
 			return array(
@@ -294,6 +295,10 @@ final class MMF_Assets {
 		// Same for a document without a closing body tag.
 		if ( $rocket_used && ! $rocket_printed ) {
 			$out .= MMF_Loader::script_tag( $rocket_js );
+		}
+
+		if ( array() !== MMF_Fonts::url_map() ) {
+			$out = self::rewrite_preloads( $out );
 		}
 
 		// The status screen lists the external hosts of the page just rewritten.
@@ -593,6 +598,48 @@ final class MMF_Assets {
 	}
 
 	/**
+	 * Rewrites `<link rel="preload" as="font">` hrefs that were localised.
+	 *
+	 * A theme that preloads a font URL and then reads the same URL from a
+	 * localised stylesheet would otherwise preload one file and load another.
+	 * Only URLs that actually moved to the cache are rewritten.
+	 *
+	 * @param string $html Document.
+	 */
+	private static function rewrite_preloads( string $html ): string {
+		$map = MMF_Fonts::url_map();
+
+		if ( array() === $map ) {
+			return $html;
+		}
+
+		$tokens = MMF_HTML::tokenize( $html );
+		$out    = '';
+
+		foreach ( $tokens as $token ) {
+			if ( 'tag' !== $token['type'] || $token['closing'] || 'link' !== $token['name'] ) {
+				$out .= (string) $token['raw'];
+				continue;
+			}
+
+			$raw   = (string) $token['raw'];
+			$attrs = self::attributes( $raw );
+			$rel   = strtolower( (string) ( $attrs['rel'] ?? '' ) );
+			$as    = strtolower( (string) ( $attrs['as'] ?? '' ) );
+			$href  = (string) ( $attrs['href'] ?? '' );
+
+			if ( ! str_contains( $rel, 'preload' ) || 'font' !== $as || ! isset( $map[ $href ] ) ) {
+				$out .= $raw;
+				continue;
+			}
+
+			$out .= self::replace_attribute( $raw, 'href', (string) $map[ $href ] );
+		}
+
+		return $out;
+	}
+
+	/**
 	 * Whether the script belongs to the delay list.
 	 *
 	 * Patterns are the opt-in: an empty list delays nothing. The hard excludes
@@ -835,6 +882,21 @@ final class MMF_Assets {
 			return array( 'status' => 'failed' );
 		}
 
+		// A stylesheet we are about to move into the cache: every relative
+		// `url()` has to be resolved against the stylesheet's own directory
+		// first, or the browser would look for the font next to the cache.
+		if ( 'css' === $type ) {
+			$absolute = self::absolute_url( $url );
+
+			if ( '' !== $absolute ) {
+				$rebased = MMF_Fonts::absolutize_urls( $absolute, $source );
+
+				if ( $rebased !== $source ) {
+					$source = $rebased;
+				}
+			}
+		}
+
 		$minified = ( 'js' === $type ) ? MMF_Minifier::minify_js( $source ) : MMF_Minifier::minify_css( $source );
 
 		if ( '' === $minified || $minified === $source ) {
@@ -1045,9 +1107,12 @@ final class MMF_Assets {
 	/**
 	 * Turns any of `//host/x`, `/x` or `x` into an absolute URL.
 	 *
+	 * Public because the merge pass has to resolve a stylesheet's own location
+	 * before it rebases that stylesheet's relative `url()` values.
+	 *
 	 * @param string $url URL from a tag.
 	 */
-	private static function absolute_url( string $url ): string {
+	public static function absolute_url( string $url ): string {
 		if ( '' === $url ) {
 			return '';
 		}

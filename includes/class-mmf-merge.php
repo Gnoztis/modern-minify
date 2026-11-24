@@ -315,6 +315,16 @@ final class MMF_Merge {
 				return array();
 			}
 
+			// The bundle lives in the cache, so relative url() values inside a
+			// stylesheet have to be rebased to that stylesheet's own directory.
+			if ( 'css' === $type ) {
+				$absolute = MMF_Assets::absolute_url( $item['src'] );
+
+				if ( '' !== $absolute ) {
+					$source = MMF_Fonts::absolutize_urls( $absolute, $source );
+				}
+			}
+
 			$minified = 'css' === $type ? MMF_Minifier::minify_css( $source ) : MMF_Minifier::minify_js( $source );
 
 			if ( ! is_string( $minified ) || '' === trim( $minified ) ) {

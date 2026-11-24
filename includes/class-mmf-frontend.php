@@ -137,10 +137,6 @@ final class MMF_Frontend {
 	 * Whether this request may be buffered.
 	 */
 	public function should_process(): bool {
-		if ( ! MMF_Config::is_enabled() ) {
-			return false;
-		}
-
 		// A second minifier on the same page breaks CSS and JS; the admin is told
 		// about it and this plugin stays out of the way.
 		if ( MMF_Conflicts::is_active() ) {
@@ -242,6 +238,10 @@ final class MMF_Frontend {
 			$stats['last_external'] = is_array( $assets['stats']['external_report'] ?? null )
 				? $assets['stats']['external_report']
 				: array();
+
+			// `get_avatar` runs while the page is rendered, before this buffer is
+			// processed, so the counter already holds the page's number.
+			$stats['gravatar'] = MMF_Gravatar::count();
 
 			MMF_Stats::record( $stats );
 

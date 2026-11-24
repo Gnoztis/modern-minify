@@ -90,7 +90,7 @@ final class MMF_Version_Hide {
 			return $src;
 		}
 
-		if ( is_admin() || ! MMF_Config::is_enabled() ) {
+		if ( is_admin() ) {
 			return $src;
 		}
 
@@ -127,7 +127,7 @@ final class MMF_Version_Hide {
 	 * Removes the generator tag from the head and the feed.
 	 */
 	public static function hide_in_head(): void {
-		if ( is_admin() || ! MMF_Config::is_enabled() || ! MMF_Config::get( 'remove_generator' ) ) {
+		if ( is_admin() || ! MMF_Config::get( 'remove_generator' ) ) {
 			return;
 		}
 
@@ -149,7 +149,7 @@ final class MMF_Version_Hide {
 	 * about, and nothing in the admin is minified.
 	 */
 	public static function remove_emoji(): void {
-		if ( ! MMF_Config::is_enabled() || ! MMF_Config::get( 'remove_emoji' ) ) {
+		if ( ! MMF_Config::get( 'remove_emoji' ) ) {
 			return;
 		}
 
