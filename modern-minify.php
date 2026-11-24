@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Modern Minify
  * Description:       Минификация CSS, JS и HTML, асинхронная загрузка файлов и обработка Google Fonts.
- * Version:           0.8.26
+ * Version:           0.8.27
  * Requires at least: 7.0
  * Tested up to:      7.1
  * Requires PHP:      8.0
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'MMF_VERSION', '0.8.26' );
+define( 'MMF_VERSION', '0.8.27' );
 
 /**
  * Cache-signature version of the minifiers.
@@ -115,6 +115,52 @@ function mmf_migrate_quality_defaults(): void {
 	update_option( 'mmf_quality_migrated', '2', false );
 }
 add_action( 'admin_init', 'mmf_migrate_quality_defaults' );
+
+/**
+ * One-time move of the stored list entries to the path form.
+ *
+ * The lists describe this site, so /wp-content/... survives a domain change
+ * while https://old-host/wp-content/... does not. Entries written in either old
+ * shape are rewritten once; a foreign host, a bare file name and a wildcard
+ * pattern stay exactly as they are.
+ */
+function mmf_migrate_patterns(): void {
+	if ( '2' === (string) get_option( 'mmf_patterns_migrated' ) ) {
+		return;
+	}
+
+	$keys    = array( 'inline_css_extra', 'async_css', 'exclude_css', 'async_js', 'defer_skip', 'exclude_js', 'delay_js', 'delay_js_exclude', 'rocket_exclude', 'external_exclude' );
+	$current = MMF_Config::all();
+	$changed = array();
+
+	foreach ( $keys as $key ) {
+		$list = isset( $current[ $key ] ) && is_array( $current[ $key ] ) ? $current[ $key ] : array();
+		$next = array();
+
+		foreach ( $list as $entry ) {
+			if ( ! is_string( $entry ) ) {
+				continue;
+			}
+
+			$next[] = MMF_Config::normalize_path_pattern( $entry );
+		}
+
+		$next = array_values( array_unique( array_filter( $next, static function ( $value ) {
+			return '' !== $value;
+		} ) ) );
+
+		if ( $next !== $list ) {
+			$changed[ $key ] = $next;
+		}
+	}
+
+	if ( array() !== $changed ) {
+		MMF_Config::update( $changed );
+	}
+
+	update_option( 'mmf_patterns_migrated', '2', false );
+}
+add_action( 'admin_init', 'mmf_migrate_patterns' );
 
 /**
  * Loads the translations shipped in `languages/`.

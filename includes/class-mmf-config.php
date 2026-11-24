@@ -425,6 +425,43 @@ final class MMF_Config {
 	 * @param mixed       $fallback Returned when the key is unknown.
 	 * @return mixed
 	 */
+	/**
+	 * Turns a stored pattern into the path form this site's lists use.
+	 *
+	 * Both shapes written in the past are accepted: a full URL with our host,
+	 * and a host without a scheme. A foreign host is kept untouched, because
+	 * it is the only thing that identifies an outside file.
+	 *
+	 * @param string $pattern Stored pattern.
+	 */
+	public static function normalize_path_pattern( string $pattern ): string {
+		$pattern = trim( $pattern );
+
+		if ( '' === $pattern ) {
+			return $pattern;
+		}
+
+		$self = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
+
+		if ( '' === $self ) {
+			return $pattern;
+		}
+
+		$lower = strtolower( $pattern );
+
+		foreach ( array( 'https://', 'http://', '//' ) as $scheme ) {
+			if ( str_starts_with( $lower, $scheme . $self . '/' ) ) {
+				return substr( $pattern, strlen( $scheme . $self ) );
+			}
+		}
+
+		if ( str_starts_with( $lower, $self . '/' ) ) {
+			return substr( $pattern, strlen( $self ) );
+		}
+
+		return $pattern;
+	}
+
 	public static function get( ?string $key = null, $fallback = null ) {
 		if ( null === $key ) {
 			return self::all();
