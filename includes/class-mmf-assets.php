@@ -1111,6 +1111,43 @@ final class MMF_Assets {
 			return $result;
 		}
 
+		// A forced file is handled before the minification pipeline: that pipeline
+		// returns "unchanged" for a file it cannot improve, and an untouched tag
+		// then stayed blocking even though the owner asked for inline or async.
+		if ( $force_inline && ! self::matches( $href, $settings['exclude_css'] ?? array() ) ) {
+			$inline_path = self::resolve_path( $href, 'css' );
+
+			if ( '' !== $inline_path && is_readable( $inline_path ) ) {
+				$inline_raw = (string) file_get_contents( $inline_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions -- local file inside uploads, read once.
+
+				if ( '' !== $inline_raw && strlen( $inline_raw ) <= 200000 && false === stripos( $inline_raw, '</style' ) ) {
+					if ( ! empty( $settings['minify_css'] ) && class_exists( 'MMF_Minifier' ) ) {
+						$inline_raw = MMF_Minifier::minify_css( $inline_raw );
+					}
+
+					$inline_id = isset( $attributes['id'] ) ? ' id="' . esc_attr( (string) $attributes['id'] ) . '"' : '';
+					$result['tag']            = '<style' . $inline_id . ( '' !== $media ? ' media="' . esc_attr( $media ) . '"' : '' ) . '>' . $inline_raw . '</style>';
+					$result['stats']['inline'] = 1;
+
+					return $result;
+				}
+			}
+		}
+
+		if ( $force_async && ! self::matches( $href, $settings['exclude_css'] ?? array() ) ) {
+			$js = 'document.addEventListener("DOMContentLoaded",function(){var l=document.createElement("link");l.rel="stylesheet";l.href=' . wp_json_encode( $href ) . ';document.head.appendChild(l);});';
+			$tag_async = MMF_Loader::script_tag( $js, array( 'id' => 'mmf-async-css-' . substr( md5( $href ), 0, 8 ), 'data-mmf-async-css' => '1' ) );
+
+			if ( '' !== $tag_async && ( ! MMF_Loader::csp_present() || MMF_Loader::tag_has_nonce( $tag_async ) ) ) {
+				$result['tag']                = $tag_async;
+				$result['stats']['async_css'] = 1;
+
+				return $result;
+			}
+
+			$result['stats']['async_blocked'] = 1;
+		}
+
 		if ( self::matches( $href, $settings['exclude_css'] ?? array() ) ) {
 			return $result;
 		}
