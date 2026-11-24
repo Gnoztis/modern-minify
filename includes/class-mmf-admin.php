@@ -2294,6 +2294,14 @@ final class MMF_Admin {
 				'css-plugin'   => __( 'рискованно', 'modern-minify' ),
 				'css-theme'    => __( 'нельзя', 'modern-minify' ),
 				'css-unknown'  => __( 'неизвестно', 'modern-minify' ),
+				// Processed rows must name what actually happened: the generic
+				// "уже отложен" used to appear next to "уже встроен в страницу".
+				'inlined-css'  => __( 'уже встроен', 'modern-minify' ),
+				'async-css'    => __( 'уже отложен', 'modern-minify' ),
+				'bundled'      => __( 'уже в пакете', 'modern-minify' ),
+				'optimized'    => __( 'уже оптимизирован', 'modern-minify' ),
+				'excluded'     => __( 'исключён', 'modern-minify' ),
+				'unknown-source' => __( 'источник неизвестен', 'modern-minify' ),
 			);
 			$css_label = $css_labels[ $css_reason ] ?? MMF_Advisor::verdict_label( (string) $item['verdict'] );
 			echo '<td><span class="mmf-verdict mmf-verdict--' . esc_attr( (string) $item['verdict'] ) . '">' . esc_html( $css_label ) . '</span></td>';
