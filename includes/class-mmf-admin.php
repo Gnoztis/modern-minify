@@ -42,6 +42,7 @@ final class MMF_Admin {
 	 */
 	private const RESET_NONCE = 'mmf_reset_cache';
 	private const ADVICE_NONCE = 'mmf_apply_advice';
+	private const WEBP_NONCE = 'mmf_delete_webp';
 
 	/**
 	 * Nonce action of the test-mode switch in the admin bar.
@@ -68,6 +69,7 @@ final class MMF_Admin {
 		add_action( 'admin_init', array( __CLASS__, 'handle_toggle_test' ) );
 		add_action( 'admin_init', array( __CLASS__, 'handle_apply_recommended' ) );
 		add_action( 'admin_post_mmf_apply_advice', array( __CLASS__, 'handle_apply_advice' ) );
+		add_action( 'admin_init', array( __CLASS__, 'handle_delete_webp' ) );
 	}
 
 	/**
@@ -369,7 +371,6 @@ final class MMF_Admin {
 				self::render_external_tab();
 			}
 
-			self::render_merge_warning( (string) $slug );
 			self::render_rocket_notices( (string) $slug );
 
 			echo '<table class="form-table" role="presentation"><tbody>';
@@ -427,7 +428,7 @@ final class MMF_Admin {
 			'css'        => array( 'minify_css', 'merge_css', 'inline_css', 'inline_css_limit', 'remove_print_css', 'exclude_css' ),
 			'fonts'      => array( 'fonts_method', 'fawesome_method', 'inline_fonts_css' ),
 			'external'   => array(),
-			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_generator', 'remove_emoji', 'ver_mode', 'disable_gravatar', 'avatar_webp', 'avatar_quality' ),
+			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_generator', 'remove_emoji', 'ver_mode', 'disable_gravatar', 'avatar_webp', 'avatar_quality', 'image_webp', 'image_quality_jpeg', 'image_quality_png', 'image_png_lossless' ),
 			'advanced'   => array( 'cache_ttl', 'cache_max_files', 'cache_max_size', 'test_mode', 'debug', 'merge_max_files', 'merge_max_size' ),
 		);
 	}
@@ -599,6 +600,22 @@ final class MMF_Admin {
 				__( 'Качество WebP для аватаров', 'modern-minify' ),
 				__( 'От 60 до 95; меньше — легче файл. Действует на новые копии.', 'modern-minify' ),
 			),
+			'image_webp'             => array(
+				__( 'Создавать WebP для загруженных картинок', 'modern-minify' ),
+				__( 'Рядом с JPEG/PNG появляется файл .webp; оригинал не меняется и не удаляется. Отдаётся только браузерам с Accept: image/webp.', 'modern-minify' ),
+			),
+			'image_quality_jpeg'     => array(
+				__( 'Качество WebP для JPEG', 'modern-minify' ),
+				__( '60–95, по умолчанию 82. Действует на новые файлы.', 'modern-minify' ),
+			),
+			'image_quality_png'      => array(
+				__( 'Качество WebP для PNG (без lossless)', 'modern-minify' ),
+				__( '60–95, по умолчанию 82; не используется, пока включён lossless.', 'modern-minify' ),
+			),
+			'image_png_lossless'     => array(
+				__( 'PNG в WebP без потерь', 'modern-minify' ),
+				__( 'По умолчанию включено: прозрачность и пиксели сохраняются, файл может быть больше JPEG-варианта.', 'modern-minify' ),
+			),
 			'external_max_size'      => array(
 				__( 'Предел размера внешнего файла, МиБ', 'modern-minify' ),
 				__( 'Файл больше предела не скачивается: тег остаётся исходным.', 'modern-minify' ),
@@ -746,6 +763,15 @@ final class MMF_Admin {
 			echo '<p class="description">' . esc_html( $help ) . '</p>';
 		}
 
+		$hints = array(
+			'merge_js'  => __( 'JS на HTTP/2 обычно не объединяем: один большой файл задерживает исполнение', 'modern-minify' ),
+			'merge_css' => __( 'CSS блокирует отрисовку, поэтому объединение сокращает критический путь', 'modern-minify' ),
+		);
+
+		if ( isset( $hints[ $key ] ) ) {
+			echo '<p class="description mmf-field-hint">' . esc_html( $hints[ $key ] ) . '</p>';
+		}
+
 		echo '</td></tr>';
 	}
 
@@ -757,8 +783,8 @@ final class MMF_Admin {
 		$stats = MMF_Stats::all();
 		$cache = MMF_Cache::stats();
 
-		echo '<h2>' . esc_html__( 'Состояние', 'modern-minify' ) . '</h2>';
-		echo '<p class="mmf-status mmf-status--on">' . esc_html__( 'плагин активен', 'modern-minify' ) . '</p>';
+		echo '<div class="mmf-status-head"><h2>' . esc_html__( 'Состояние', 'modern-minify' ) . '</h2>';
+		echo '<span class="mmf-status mmf-status--on"><span class="mmf-status__dot" aria-hidden="true"></span>' . esc_html__( 'плагин активен', 'modern-minify' ) . '</span></div>';
 
 		self::render_last_action();
 		self::render_features();
@@ -787,6 +813,12 @@ final class MMF_Admin {
 				__( 'Delay JS, всего', 'modern-minify' )       => (string) (int) $stats['delayed'],
 				__( 'Delay JS на последней странице', 'modern-minify' ) => (string) (int) $stats['last_delayed'],
 				__( 'Rocket-режимом', 'modern-minify' )        => (string) (int) $stats['rocket'],
+			)
+		);
+
+		self::status_group(
+			__( 'Пакеты', 'modern-minify' ),
+			array(
 				__( 'Пакетов собрано', 'modern-minify' )       => (string) (int) $stats['bundles'],
 				__( 'CSS-файлов: было → стало', 'modern-minify' ) => ( 0 === (int) $stats['last_css_before'] && 0 === (int) $stats['last_css_after'] ) ? '—' : (int) $stats['last_css_before'] . ' → ' . (int) $stats['last_css_after'],
 				__( 'Файлов в пакетах', 'modern-minify' )      => (string) (int) $stats['bundled_files'],
@@ -830,10 +862,39 @@ final class MMF_Admin {
 			)
 		);
 
+		$methods = array(
+			'imagick' => 'Imagick',
+			'gd'      => 'GD',
+			'cwebp'   => 'cwebp',
+		);
+
+		self::status_group(
+			__( 'Картинки WebP', 'modern-minify' ),
+			array(
+				__( 'Создано WebP', 'modern-minify' )        => (string) (int) $stats['image_created'],
+				__( 'Отдано WebP', 'modern-minify' )         => (string) (int) $stats['image_served'],
+				__( 'Сэкономлено, КБ', 'modern-minify' )     => (string) (int) round( (int) $stats['image_saved'] / 1024 ),
+				__( 'Ошибок конвертации', 'modern-minify' )  => (string) (int) $stats['image_errors'],
+				__( 'Пропущено: меньше 10 КБ', 'modern-minify' ) => (string) (int) $stats['image_small'],
+				__( 'Пропущено: WebP больше', 'modern-minify' ) => (string) (int) $stats['image_bigger'],
+				__( 'Конвертер', 'modern-minify' )           => MMF_Images::method() !== '' ? (string) ( $methods[ MMF_Images::method() ] ?? MMF_Images::method() ) : __( 'недоступен', 'modern-minify' ),
+			)
+		);
+
 		$max_files = (int) MMF_Config::get( 'cache_max_files', 1000 );
 		$max_size  = (int) MMF_Config::get( 'cache_max_size', 100 ) * 1024 * 1024;
 		$ttl_days  = (int) MMF_Config::get( 'cache_ttl', 7 );
 		$cleaned   = (int) get_option( MMF_Cache::LAST_CLEANUP_OPTION, 0 );
+
+		$cache_warn = array();
+
+		if ( (int) $cache['files'] > $max_files ) {
+			$cache_warn[] = __( 'Файлов в кеше', 'modern-minify' );
+		}
+
+		if ( (int) $cache['size'] > $max_size ) {
+			$cache_warn[] = __( 'Размер кеша', 'modern-minify' );
+		}
 
 		self::status_group(
 			__( 'Кеш и ошибки', 'modern-minify' ),
@@ -846,7 +907,8 @@ final class MMF_Admin {
 				__( 'Кеш обновлён', 'modern-minify' )       => $cache['updated'] > 0 ? (string) wp_date( 'Y-m-d H:i:s', (int) $cache['updated'] ) : __( 'ещё не было', 'modern-minify' ),
 				__( 'Каталог', 'modern-minify' )            => (string) $cache['dir'],
 				__( 'Доступен для записи', 'modern-minify' ) => $cache['writable'] ? __( 'да', 'modern-minify' ) : __( 'нет', 'modern-minify' ),
-			)
+			),
+			$cache_warn
 		);
 
 		echo '</div>';
@@ -869,7 +931,19 @@ final class MMF_Admin {
 			self::RESET_NONCE
 		);
 
-		echo '<p class="mmf-actions"><a class="button mmf-reset" href="' . esc_url( $reset_url ) . '">' . esc_html__( 'Сбросить кеш', 'modern-minify' ) . '</a></p>';
+		$webp_url = wp_nonce_url(
+			add_query_arg(
+				array(
+					'page'   => self::PAGE,
+					'action' => 'mmf_delete_webp',
+				),
+				admin_url( 'options-general.php' )
+			),
+			self::WEBP_NONCE
+		);
+
+		echo '<p class="mmf-actions"><a class="button mmf-reset" href="' . esc_url( $reset_url ) . '">' . esc_html__( 'Сбросить кеш', 'modern-minify' ) . '</a> ';
+		echo '<a class="button" href="' . esc_url( $webp_url ) . '">' . esc_html__( 'Удалить все WebP', 'modern-minify' ) . '</a></p>';
 
 		self::render_recommended();
 	}
@@ -1068,11 +1142,13 @@ final class MMF_Admin {
 	 * @param string               $title Card title.
 	 * @param array<string,string> $rows  Label to value.
 	 */
-	private static function status_group( string $title, array $rows ): void {
+	private static function status_group( string $title, array $rows, array $warn = array() ): void {
 		echo '<section class="mmf-card mmf-status-card"><h3 class="mmf-section-title">' . esc_html( $title ) . '</h3><dl class="mmf-metrics">';
 
 		foreach ( $rows as $label => $value ) {
-			echo '<div class="mmf-metric"><dt class="mmf-metric__label">' . esc_html( (string) $label ) . '</dt><dd class="mmf-metric__value">' . esc_html( (string) $value ) . '</dd></div>';
+			$class = in_array( (string) $label, $warn, true ) ? 'mmf-metric__value mmf-metric__value--warn' : 'mmf-metric__value';
+
+			echo '<div class="mmf-metric"><dt class="mmf-metric__label">' . esc_html( (string) $label ) . '</dt><dd class="' . esc_attr( $class ) . '">' . esc_html( (string) $value ) . '</dd></div>';
 		}
 
 		echo '</dl></section>';
@@ -1384,6 +1460,7 @@ final class MMF_Admin {
 			'test-off'    => __( 'Тестовый режим выключен.', 'modern-minify' ),
 			'recommended-noop' => __( 'Настройки уже соответствуют рекомендуемым.', 'modern-minify' ),
 			'advice'      => __( 'Выбранные шаблоны добавлены в список, кеш сброшен.', 'modern-minify' ),
+			'webp-deleted' => __( 'Сгенерированные WebP удалены.', 'modern-minify' ),
 		);
 
 		$message = isset( $messages[ $type ] ) ? (string) $messages[ $type ] : '';
@@ -1445,6 +1522,37 @@ final class MMF_Admin {
 		if ( is_array( $delay_patterns ) && array() !== $delay_patterns ) {
 			echo '<div class="notice notice-info inline"><p>' . esc_html__( 'Rocket-режим откладывает все скрипты, поэтому список Delay JS не действует: если файл попал в оба, побеждает Rocket-режим.', 'modern-minify' ) . '</p></div>';
 		}
+	}
+
+	/**
+	 * Deletes every generated WebP sidecar, a reversible off switch.
+	 */
+	public static function handle_delete_webp(): void {
+		if ( ! isset( $_GET['action'] ) || 'mmf_delete_webp' !== sanitize_key( (string) wp_unslash( $_GET['action'] ) ) ) {
+			return;
+		}
+
+		if ( ! current_user_can( self::CAPABILITY ) ) {
+			wp_die( esc_html__( 'Недостаточно прав.', 'modern-minify' ) );
+		}
+
+		check_admin_referer( self::WEBP_NONCE );
+
+		$deleted = MMF_Images::delete_all();
+		MMF_Stats::record_action( sprintf( __( 'Удалено WebP-файлов: %d.', 'modern-minify' ), (int) $deleted ) );
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'            => self::PAGE,
+					'mmf-toast'       => 'webp-deleted',
+					'mmf-webp'        => $deleted,
+					'mmf-toast-nonce' => wp_create_nonce( self::TOAST_NONCE ),
+				),
+				admin_url( 'options-general.php' )
+			)
+		);
+		exit;
 	}
 
 	/**
@@ -1535,7 +1643,7 @@ final class MMF_Admin {
 		);
 		echo '</p>';
 
-		echo '<table class="widefat striped mmf-report-table mmf-advisor-table"><thead><tr>';
+		echo '<div class="mmf-advisor-scroll"><table class="widefat striped mmf-report-table mmf-advisor-table"><thead><tr>';
 		echo '<th scope="col">' . esc_html__( 'Ресурс', 'modern-minify' ) . '</th>';
 		echo '<th scope="col">' . esc_html__( 'Размер', 'modern-minify' ) . '</th>';
 		echo '<th scope="col">' . esc_html__( 'Вердикт', 'modern-minify' ) . '</th>';
@@ -1559,7 +1667,7 @@ final class MMF_Admin {
 			echo '</td></tr>';
 		}
 
-		echo '</tbody></table>';
+		echo '</tbody></table></div>';
 
 		echo '<p class="mmf-advisor__actions">';
 		echo '<select name="mmf_advice_mode"><option value="delay">' . esc_html__( 'Delay JS', 'modern-minify' ) . '</option><option value="defer">' . esc_html__( 'Не откладывать (defer_skip)', 'modern-minify' ) . '</option></select> ';
@@ -1571,30 +1679,11 @@ final class MMF_Admin {
 	}
 
 	/**
-	 * Prints the HTTP/2 warning on the tabs where combining can be enabled.
-	 *
-	 * @param string $slug Tab slug.
-	 */
-	private static function render_merge_warning( string $slug ): void {
-		if ( 'javascript' === $slug && MMF_Config::get( 'merge_js' ) ) {
-			echo '<div class="notice notice-warning inline"><p>' . esc_html( MMF_Notices::merge_warning() ) . '</p></div>';
-		}
-
-		if ( 'css' === $slug && MMF_Config::get( 'merge_css' ) ) {
-			echo '<div class="notice notice-warning inline"><p>' . esc_html( MMF_Notices::merge_warning() ) . '</p></div>';
-		}
-
-		if ( 'javascript' === $slug && MMF_Config::get( 'defer_external' ) ) {
-			echo '<div class="notice notice-warning inline"><p>' . esc_html( MMF_Notices::defer_external_warning() ) . '</p></div>';
-		}
-	}
-
-	/**
 	 * Styles of the screen: inline, this screen only.
 	 */
 	public static function inline_css(): string {
 		return <<<'CSS'
-.mmf-wrap{--mmf-bg:#fff;--mmf-surface:#f6f7f7;--mmf-fg:#1d2327;--mmf-muted:#3c434a;--mmf-border:#c3c4c7;--mmf-accent:var(--wp-admin-theme-color,#2271b1);--mmf-ok-fg:#0a5c1c;--mmf-ok-bg:#edfaef;--mmf-err-fg:#7a0f0f;--mmf-err-bg:#fcf0f1;--mmf-toast-fg:#1d2327;--mmf-toast-bg:#fff;--mmf-chip-bg:#f6f7f7;--mmf-chip-off-fg:#3c434a;--mmf-dot-on:#1a7f37;--mmf-dot-off:#8c8f94;--mmf-popover-bg:#fff;--mmf-popover-fg:#1d2327;--mmf-popover-muted:#3c434a;--mmf-badge-bg:#edfaef;--mmf-badge-fg:#0a5c1c;--mmf-warn-bg:#fcf9e8;--mmf-warn-fg:#1d2327;--mmf-radius:8px;--mmf-gap:8px;--mmf-gap-2:16px;--mmf-gap-3:24px;color:var(--mmf-fg);max-width:1400px}
+.mmf-wrap{--mmf-bg:#fff;--mmf-surface:#f6f7f7;--mmf-fg:#1d2327;--mmf-muted:#3c434a;--mmf-border:#c3c4c7;--mmf-accent:var(--wp-admin-theme-color,#2271b1);--mmf-ok-fg:#0a5c1c;--mmf-ok-bg:#edfaef;--mmf-err-fg:#7a0f0f;--mmf-err-bg:#fcf0f1;--mmf-toast-fg:#1d2327;--mmf-toast-bg:#fff;--mmf-chip-bg:#f6f7f7;--mmf-chip-off-fg:#3c434a;--mmf-dot-on:#1a7f37;--mmf-dot-off:#8c8f94;--mmf-popover-bg:#fff;--mmf-popover-fg:#1d2327;--mmf-popover-muted:#3c434a;--mmf-badge-bg:#edfaef;--mmf-badge-fg:#0a5c1c;--mmf-warn-bg:#fcf9e8;--mmf-warn-fg:#1d2327;--mmf-warn-num:#b26200;--mmf-radius:8px;--mmf-gap:8px;--mmf-gap-2:16px;--mmf-gap-3:24px;color:var(--mmf-fg);max-width:1400px}
 .mmf-wrap .mmf-tabs{margin-bottom:var(--mmf-gap-2)}
 .mmf-wrap .mmf-panel .form-table{table-layout:fixed;width:100%}
 .mmf-wrap .mmf-panel .form-table th{width:200px;overflow-wrap:anywhere}
@@ -1604,7 +1693,11 @@ final class MMF_Admin {
 .mmf-wrap .mmf-panel .form-table textarea{min-height:96px}
 .mmf-wrap .mmf-card{background:var(--mmf-bg);border:1px solid var(--mmf-border);border-radius:var(--mmf-radius);padding:var(--mmf-gap-2);margin:0 0 var(--mmf-gap-2)}
 .mmf-wrap .mmf-section-title{margin:0 0 var(--mmf-gap);font-size:13px;line-height:1.4;text-transform:uppercase;letter-spacing:.04em;color:var(--mmf-muted);font-weight:600}
-.mmf-wrap .mmf-status{display:inline-block;padding:4px 12px;border-radius:999px;background:var(--mmf-ok-bg);color:var(--mmf-ok-fg);margin:0 0 var(--mmf-gap-2)}
+.mmf-wrap .mmf-status-head{display:flex;align-items:center;gap:var(--mmf-gap);flex-wrap:wrap;margin:0 0 var(--mmf-gap-2)}
+.mmf-wrap .mmf-status-head h2{margin:0}
+.mmf-wrap .mmf-status{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:999px;background:var(--mmf-ok-bg);color:var(--mmf-ok-fg);margin:0}
+.mmf-wrap .mmf-status__dot{width:8px;height:8px;border-radius:50%;background:var(--mmf-dot-on);flex:none}
+@media (max-width:900px){.mmf-wrap .mmf-status-head h2{flex:1 0 100%}}
 .mmf-wrap .mmf-status--on{background:var(--mmf-ok-bg);color:var(--mmf-ok-fg)}
 .mmf-wrap .mmf-last-action__text{margin:0 0 4px;font-size:14px}
 .mmf-wrap .mmf-chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--mmf-gap-2);margin:0 0 var(--mmf-gap-3)}
@@ -1621,6 +1714,7 @@ final class MMF_Admin {
 .mmf-wrap .mmf-metric{display:flex;justify-content:space-between;align-items:baseline;gap:var(--mmf-gap-2);padding-bottom:var(--mmf-gap);border-bottom:1px solid var(--mmf-border)}
 .mmf-wrap .mmf-metric:last-child{border-bottom:0;padding-bottom:0}
 .mmf-wrap .mmf-metric__label{margin:0;color:var(--mmf-muted);font-size:13px}
+.mmf-wrap .mmf-metric__value--warn{color:var(--mmf-warn-num)}
 .mmf-wrap .mmf-metric__value{margin:0;font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--mmf-fg);text-align:right}
 .mmf-wrap .mmf-actions{margin:var(--mmf-gap-2) 0 0}
 .mmf-wrap .mmf-toasts{position:fixed;top:48px;right:var(--mmf-gap-2);z-index:100000;display:flex;flex-direction:column;gap:var(--mmf-gap);max-width:360px}
@@ -1640,6 +1734,16 @@ final class MMF_Admin {
 .mmf-wrap .mmf-verdict--cannot{background:#fcf0f1;color:#7a0f0f}
 .mmf-wrap .mmf-verdict--done{background:#f0f0f1;color:#3c434a}
 .mmf-wrap .mmf-advisor__summary{font-weight:600}
+.mmf-wrap .mmf-advisor-scroll{max-width:100%;overflow-x:auto}
+.mmf-wrap .mmf-advisor-table{table-layout:fixed;width:100%;min-width:620px}
+.mmf-wrap .mmf-advisor-table th{white-space:nowrap}
+.mmf-wrap .mmf-advisor-table th:nth-child(2),.mmf-wrap .mmf-advisor-table td:nth-child(2){width:90px;text-align:right}
+.mmf-wrap .mmf-advisor-table th:nth-child(3),.mmf-wrap .mmf-advisor-table td:nth-child(3){width:240px}
+.mmf-wrap .mmf-advisor-table th:nth-child(4),.mmf-wrap .mmf-advisor-table td:nth-child(4){width:90px}
+.mmf-wrap .mmf-advisor-table td:first-child{min-width:120px}
+.mmf-wrap .mmf-advisor-table td:first-child code{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mmf-wrap .mmf-advisor-table td:first-child .description{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-all;margin:0}
+.mmf-wrap .mmf-advisor-table .mmf-verdict{white-space:nowrap}
 .mmf-wrap .mmf-advisor__actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0 4px}
 .mmf-wrap .mmf-recommend-warning{display:flex;align-items:flex-start;gap:6px;margin:8px 0 0;padding:8px 12px;border-radius:var(--mmf-radius);background:var(--mmf-warn-bg);color:var(--mmf-warn-fg);font-size:13px;max-width:100%;box-sizing:border-box}
 .mmf-wrap .mmf-recommend-warning .dashicons{font-size:16px;width:16px;height:16px;margin-top:2px;color:#b26200}
@@ -1665,7 +1769,9 @@ final class MMF_Admin {
 .mmf-wrap .mmf-popover__note{color:var(--mmf-popover-muted);margin:0 0 var(--mmf-gap-2)}
 .mmf-wrap .mmf-popover__actions{display:flex;gap:var(--mmf-gap);margin:0}
 .mmf-wrap :focus-visible{outline:2px solid var(--mmf-accent);outline-offset:2px}
-@media (max-width:1199px){.mmf-wrap .mmf-status-columns,.mmf-wrap .mmf-chips{grid-template-columns:1fr}}
+@media (max-width:1199px){.mmf-wrap .mmf-chips{grid-template-columns:1fr}}
+@media (max-width:1024px){.mmf-wrap .mmf-status-columns{display:block;column-count:2;column-gap:var(--mmf-gap-2)}.mmf-wrap .mmf-status-columns .mmf-status-card{break-inside:avoid;margin-bottom:var(--mmf-gap-2);display:inline-block;width:100%}}
+@media (max-width:768px){.mmf-wrap .mmf-status-columns{column-count:1}}
 @media (max-width:899px){.mmf-wrap .mmf-report-table thead{display:none}.mmf-wrap .mmf-report-table tr{display:block;border-top:1px solid var(--mmf-border);padding:8px 0}.mmf-wrap .mmf-report-table td{display:block;width:auto;border:0;padding:2px 0}.mmf-wrap .mmf-report-table td:first-child,.mmf-wrap .mmf-report-table td:last-child{width:auto}}
 @media (max-width:782px){.mmf-wrap .mmf-toasts{top:62px;left:var(--mmf-gap-2);right:var(--mmf-gap-2);max-width:none}}
 @media (prefers-reduced-motion: no-preference){.mmf-wrap .mmf-toast{animation:mmf-toast-in .18s ease-out}}
@@ -1698,6 +1804,7 @@ CSS;
 			array( 'fg' => '--mmf-popover-muted', 'bg' => '--mmf-popover-bg', 'label' => 'popover note' ),
 			array( 'fg' => '--mmf-badge-fg', 'bg' => '--mmf-badge-bg', 'label' => 'recommended badge' ),
 			array( 'fg' => '--mmf-warn-fg', 'bg' => '--mmf-warn-bg', 'label' => 'recommendation warning' ),
+			array( 'fg' => '--mmf-warn-num', 'bg' => '--mmf-bg', 'label' => 'over-limit counter' ),
 		);
 	}
 

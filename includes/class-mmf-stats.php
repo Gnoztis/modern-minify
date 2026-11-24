@@ -69,6 +69,12 @@ final class MMF_Stats {
 			'avatar_webp'        => 0,
 			'avatar_saved'       => 0,
 			'avatar_errors'      => 0,
+			'image_created'      => 0,
+			'image_served'       => 0,
+			'image_saved'        => 0,
+			'image_errors'       => 0,
+			'image_small'        => 0,
+			'image_bigger'       => 0,
 			'bundles'            => 0,
 			'bundled_files'      => 0,
 			'bundle_bytes'       => 0,
@@ -392,6 +398,29 @@ final class MMF_Stats {
 	 *
 	 * @param string $message Human-readable result.
 	 */
+	/**
+	 * Adds to one known counter.
+	 *
+	 * Used by the image converter: an upload happens outside a page request, so
+	 * it cannot go through the per-page record path.
+	 *
+	 * @param string $key Counter name.
+	 * @param int    $by  Amount.
+	 */
+	public static function increment( string $key, int $by = 1 ): void {
+		$all = self::all();
+
+		if ( ! array_key_exists( $key, $all ) ) {
+			return;
+		}
+
+		$all[ $key ] = (int) $all[ $key ] + $by;
+		$all['updated'] = time();
+
+		// Not throttled: conversions and served images are rare, batched events.
+		update_option( self::OPTION, $all, false );
+	}
+
 	public static function record_action( string $message ): void {
 		$message = trim( sanitize_text_field( $message ) );
 

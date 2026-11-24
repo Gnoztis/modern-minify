@@ -303,6 +303,26 @@ final class MMF_Config {
 				'min'     => 60,
 				'max'     => 95,
 			),
+			'image_webp'             => array(
+				'type'    => 'bool',
+				'default' => true,
+			),
+			'image_quality_jpeg'     => array(
+				'type'    => 'int',
+				'default' => 82,
+				'min'     => 60,
+				'max'     => 95,
+			),
+			'image_quality_png'      => array(
+				'type'    => 'int',
+				'default' => 82,
+				'min'     => 60,
+				'max'     => 95,
+			),
+			'image_png_lossless'     => array(
+				'type'    => 'bool',
+				'default' => true,
+			),
 			// Test mode: the pipeline runs only for administrators, so the site
 			// owner can look at the result on the live site without risking
 			// visitors.

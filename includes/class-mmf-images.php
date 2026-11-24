@@ -1,0 +1,602 @@
+<?php
+/**
+ * WebP sidecars for uploaded images.
+ *
+ * Converters are detected once, best first: Imagick, then GD, then the cwebp
+ * binary. No Composer package is involved and nothing is written outside the
+ * uploads tree.
+ *
+ * A sidecar is a plain file next to the original: `photo.jpg.webp`. It is not
+ * an attachment, so the media library does not list it twice, and it is removed
+ * together with the original. Originals are only read, never modified.
+ *
+ * Serving is minimal: only the `src` and `srcset` attribute values of `<img>`
+ * tags are swapped, and only when the visitor accepts WebP and the sidecar
+ * already exists. No `<picture>`, no extra tags.
+ *
+ * @package ModernMinify
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+if ( class_exists( 'MMF_Images' ) ) {
+	return;
+}
+
+/**
+ * Converts uploads to WebP sidecars and serves them.
+ */
+final class MMF_Images {
+
+	public const MIN_BYTES = 10240;
+
+	/**
+	 * Detected converter, `null` until first use.
+	 */
+	private static ?string $method = null;
+
+	/**
+	 * Whether the output buffer is already started.
+	 */
+	private static bool $buffering = false;
+
+	/**
+	 * Served on this request, flushed once at shutdown.
+	 */
+	private static int $served = 0;
+
+	/**
+	 * Bytes saved on this request.
+	 */
+	private static int $saved = 0;
+
+	/**
+	 * URLs already counted in this request.
+	 *
+	 * @var array<string,bool>
+	 */
+	private static array $counted = array();
+
+	/**
+	 * Registered the hooks.
+	 */
+	public static function register_hooks(): void {
+		add_filter( 'wp_generate_attachment_metadata', array( __CLASS__, 'on_metadata' ), 20, 2 );
+		add_action( 'delete_attachment', array( __CLASS__, 'on_delete' ) );
+		add_action( 'template_redirect', array( __CLASS__, 'maybe_buffer' ), 2 );
+		add_action( 'shutdown', array( __CLASS__, 'flush_stats' ) );
+	}
+
+	/**
+	 * Converter name: `imagick`, `gd`, `cwebp` or an empty string.
+	 */
+	public static function method(): string {
+		if ( null !== self::$method ) {
+			return self::$method;
+		}
+
+		$method = '';
+
+		if ( extension_loaded( 'imagick' ) && class_exists( 'Imagick' ) ) {
+			try {
+				$formats = \Imagick::queryFormats( 'WEBP' );
+				$method  = is_array( $formats ) && array() !== $formats ? 'imagick' : '';
+			} catch ( \Throwable $error ) {
+				$method = '';
+			}
+		}
+
+		if ( '' === $method && function_exists( 'imagewebp' ) && function_exists( 'imagetypes' ) && defined( 'IMG_WEBP' ) && ( imagetypes() & IMG_WEBP ) ) {
+			$method = 'gd';
+		}
+
+		if ( '' === $method ) {
+			$binary = self::find_cwebp();
+
+			if ( '' !== $binary ) {
+				$method = 'cwebp';
+			}
+		}
+
+		self::$method = $method;
+
+		return self::$method;
+	}
+
+	/**
+	 * Path of a cwebp binary, empty when unavailable.
+	 */
+	private static function find_cwebp(): string {
+		if ( ! function_exists( 'exec' ) ) {
+			return '';
+		}
+
+		$disabled = array_map( 'trim', explode( ',', (string) ini_get( 'disable_functions' ) ) );
+
+		if ( in_array( 'exec', $disabled, true ) ) {
+			return '';
+		}
+
+		$command = DIRECTORY_SEPARATOR === '\\' ? 'where cwebp' : 'which cwebp';
+		$output  = array();
+		$code    = 1;
+
+		@exec( $command . ' 2>' . ( DIRECTORY_SEPARATOR === '\\' ? 'NUL' : '/dev/null' ), $output, $code ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.PHP.DiscouragedPHPFunctions -- detection only.
+
+		if ( 0 !== $code || ! isset( $output[0] ) ) {
+			return '';
+		}
+
+		$path = trim( (string) $output[0] );
+
+		return is_file( $path ) ? $path : '';
+	}
+
+	/**
+	 * Whether conversion applies to this request/site.
+	 */
+	public static function enabled(): bool {
+		return '' !== self::method() && (bool) MMF_Config::get( 'image_webp', true );
+	}
+
+	/**
+	 * Sidecar path of a file.
+	 *
+	 * @param string $file Original path.
+	 */
+	public static function sidecar( string $file ): string {
+		return $file . '.webp';
+	}
+
+	/**
+	 * Converts the original and every generated size of an attachment.
+	 *
+	 * @param mixed $metadata Attachment metadata.
+	 * @param mixed $id       Attachment ID.
+	 * @return mixed
+	 */
+	public static function on_metadata( $metadata, $id ) {
+		if ( ! is_array( $metadata ) || ! self::enabled() ) {
+			return $metadata;
+		}
+
+		$file = isset( $metadata['file'] ) ? (string) $metadata['file'] : '';
+
+		if ( '' === $file ) {
+			return $metadata;
+		}
+
+		$uploads = wp_upload_dir( null, false );
+
+		if ( ! is_array( $uploads ) || ! empty( $uploads['error'] ) ) {
+			return $metadata;
+		}
+
+		$base  = trailingslashit( (string) $uploads['basedir'] );
+		$dir   = trailingslashit( dirname( $file ) );
+		$paths = array( $base . $file );
+
+		foreach ( (array) ( $metadata['sizes'] ?? array() ) as $size ) {
+			if ( is_array( $size ) && isset( $size['file'] ) ) {
+				$paths[] = $base . $dir . (string) $size['file'];
+			}
+		}
+
+		foreach ( $paths as $path ) {
+			self::convert_file( $path );
+		}
+
+		return $metadata;
+	}
+
+	/**
+	 * Removes sidecars of an attachment before it is deleted.
+	 *
+	 * @param mixed $id Attachment ID.
+	 */
+	public static function on_delete( $id ): void {
+		$metadata = wp_get_attachment_metadata( (int) $id );
+		$file     = is_array( $metadata ) && isset( $metadata['file'] ) ? (string) $metadata['file'] : '';
+
+		if ( '' === $file ) {
+			return;
+		}
+
+		$uploads = wp_upload_dir( null, false );
+
+		if ( ! is_array( $uploads ) || ! empty( $uploads['error'] ) ) {
+			return;
+		}
+
+		$base  = trailingslashit( (string) $uploads['basedir'] );
+		$dir   = trailingslashit( dirname( $file ) );
+		$paths = array( $base . $file );
+
+		foreach ( (array) ( $metadata['sizes'] ?? array() ) as $size ) {
+			if ( is_array( $size ) && isset( $size['file'] ) ) {
+				$paths[] = $base . $dir . (string) $size['file'];
+			}
+		}
+
+		foreach ( $paths as $path ) {
+			$sidecar = self::sidecar( $path );
+
+			if ( is_file( $sidecar ) ) {
+				@unlink( $sidecar ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- a concurrent cleanup may have removed it.
+			}
+		}
+	}
+
+	/**
+	 * Converts one file into its sidecar.
+	 *
+	 * @param string $path Original path.
+	 * @return string `created`, `skipped`, `bigger`, `error` or `exists`.
+	 */
+	public static function convert_file( string $path ): string {
+		$sidecar = self::sidecar( $path );
+
+		if ( is_file( $sidecar ) ) {
+			return 'exists';
+		}
+
+		if ( ! self::enabled() || ! is_file( $path ) || ! is_readable( $path ) ) {
+			return 'skipped';
+		}
+
+		$type = strtolower( (string) pathinfo( $path, PATHINFO_EXTENSION ) );
+
+		if ( ! in_array( $type, array( 'jpg', 'jpeg', 'png' ), true ) ) {
+			return 'skipped';
+		}
+
+		if ( (int) filesize( $path ) < self::MIN_BYTES ) {
+			MMF_Stats::increment( 'image_small' );
+
+			return 'skipped';
+		}
+
+		$info = @getimagesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- a broken file is the expected failure.
+
+		if ( ! is_array( $info ) || empty( $info[0] ) || empty( $info[1] ) ) {
+			MMF_Stats::increment( 'image_errors' );
+
+			return 'error';
+		}
+
+		$ok = self::write_sidecar( $path, $sidecar, $type );
+
+		if ( ! $ok ) {
+			MMF_Stats::increment( 'image_errors' );
+
+			return 'error';
+		}
+
+		if ( (int) filesize( $sidecar ) >= (int) filesize( $path ) ) {
+			@unlink( $sidecar ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- our own file.
+
+			MMF_Stats::increment( 'image_bigger' );
+
+			return 'bigger';
+		}
+
+		MMF_Stats::increment( 'image_created' );
+
+		return 'created';
+	}
+
+	/**
+	 * Runs the detected converter.
+	 *
+	 * @param string $path    Source.
+	 * @param string $target  Sidecar.
+	 * @param string $type    `jpg`, `jpeg` or `png`.
+	 */
+	private static function write_sidecar( string $path, string $target, string $type ): bool {
+		$quality = 'png' === $type ? (int) MMF_Config::get( 'image_quality_png', 82 ) : (int) MMF_Config::get( 'image_quality_jpeg', 82 );
+		$quality = max( 60, min( 95, $quality ) );
+
+		if ( 'png' === $type && (bool) MMF_Config::get( 'image_png_lossless', true ) ) {
+			$quality = 100;
+		}
+
+		$tmp = $target . '.tmp';
+
+		if ( file_exists( $tmp ) ) {
+			@unlink( $tmp ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- stale temporary file.
+		}
+
+		$method = self::method();
+		$ok     = false;
+
+		if ( 'imagick' === $method ) {
+			$ok = self::via_imagick( $path, $tmp, $quality, 'png' === $type );
+		} elseif ( 'gd' === $method ) {
+			$ok = self::via_gd( $path, $tmp, $quality, $type );
+		} elseif ( 'cwebp' === $method ) {
+			$ok = self::via_cwebp( $path, $tmp, $quality, 'png' === $type );
+		}
+
+		if ( ! $ok || ! is_file( $tmp ) || 0 === (int) filesize( $tmp ) ) {
+			@unlink( $tmp ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- nothing to keep.
+
+			return false;
+		}
+
+		return (bool) @rename( $tmp, $target ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- a concurrent request may have written it.
+	}
+
+	/**
+	 * Imagick conversion.
+	 *
+	 * @param string $path     Source.
+	 * @param string $tmp      Target.
+	 * @param int    $quality  Quality.
+	 * @param bool   $lossless PNG lossless mode.
+	 */
+	private static function via_imagick( string $path, string $tmp, int $quality, bool $lossless ): bool {
+		try {
+			$image = new \Imagick( $path );
+			$image->setImageFormat( 'webp' );
+			$image->setImageCompressionQuality( $quality );
+
+			if ( $lossless ) {
+				$image->setOption( 'webp:lossless', 'true' );
+			}
+
+			$ok = $image->writeImage( $tmp );
+			$image->clear();
+
+			return (bool) $ok;
+		} catch ( \Throwable $error ) {
+			return false;
+		}
+	}
+
+	/**
+	 * GD conversion.
+	 *
+	 * @param string $path    Source.
+	 * @param string $tmp     Target.
+	 * @param int    $quality Quality.
+	 * @param string $type    Source type.
+	 */
+	private static function via_gd( string $path, string $tmp, int $quality, string $type ): bool {
+		if ( 'png' === $type ) {
+			$image = function_exists( 'imagecreatefrompng' ) ? @imagecreatefrompng( $path ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors -- a broken file is reported by false.
+		} else {
+			$image = function_exists( 'imagecreatefromjpeg' ) ? @imagecreatefromjpeg( $path ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors -- a broken file is reported by false.
+		}
+
+		if ( ! $image ) {
+			return false;
+		}
+
+		if ( 'png' === $type ) {
+			@imagepalettetotruecolor( $image ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- truecolor PNGs are fine.
+			@imagealphablending( $image, false ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- not fatal without alpha.
+			@imagesavealpha( $image, true ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- not fatal without alpha.
+		}
+
+		$ok = @imagewebp( $image, $tmp, $quality ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- reported by the return value.
+		@imagedestroy( $image ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- cleanup.
+
+		return (bool) $ok;
+	}
+
+	/**
+	 * cwebp conversion.
+	 *
+	 * @param string $path     Source.
+	 * @param string $tmp      Target.
+	 * @param int    $quality  Quality.
+	 * @param bool   $lossless PNG lossless mode.
+	 */
+	private static function via_cwebp( string $path, string $tmp, int $quality, bool $lossless ): bool {
+		$binary = self::find_cwebp();
+
+		if ( '' === $binary ) {
+			return false;
+		}
+
+		$command = escapeshellarg( $binary )
+			. ' -quiet'
+			. ( $lossless ? ' -lossless' : ' -q ' . (int) $quality )
+			. ' ' . escapeshellarg( $path )
+			. ' -o ' . escapeshellarg( $tmp );
+
+		$output = array();
+		$code   = 1;
+
+		@exec( $command . ' 2>&1', $output, $code ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.PHP.DiscouragedPHPFunctions -- the detected binary and escaped arguments.
+
+		return 0 === $code && is_file( $tmp );
+	}
+
+	/**
+	 * Writes the per-request serving counters once.
+	 */
+	public static function flush_stats(): void {
+		if ( self::$served > 0 ) {
+			MMF_Stats::increment( 'image_served', self::$served );
+		}
+
+		if ( self::$saved > 0 ) {
+			MMF_Stats::increment( 'image_saved', self::$saved );
+		}
+
+		self::$served  = 0;
+		self::$saved   = 0;
+		self::$counted = array();
+	}
+
+	/**
+	 * Starts the output buffer when serving can change something.
+	 */
+	public static function maybe_buffer(): void {
+		if ( self::$buffering || is_admin() || wp_doing_cron() ) {
+			return;
+		}
+
+		if ( ! (bool) MMF_Config::get( 'image_webp', true ) || ! self::accepts_webp() ) {
+			return;
+		}
+
+		self::$buffering = true;
+
+		ob_start( array( __CLASS__, 'rewrite_html' ) );
+	}
+
+	/**
+	 * Whether the visitor accepts WebP.
+	 */
+	private static function accepts_webp(): bool {
+		$accept = isset( $_SERVER['HTTP_ACCEPT'] ) ? (string) $_SERVER['HTTP_ACCEPT'] : '';
+
+		return '' !== $accept && false !== stripos( $accept, 'image/webp' );
+	}
+
+	/**
+	 * Swaps `src` and `srcset` values of `<img>` tags.
+	 *
+	 * @param string $html Buffered HTML.
+	 */
+	public static function rewrite_html( string $html ): string {
+		if ( '' === $html || false === stripos( $html, '<img' ) ) {
+			return $html;
+		}
+
+		$out = '';
+
+		foreach ( MMF_HTML::tokenize( $html ) as $token ) {
+			if ( 'tag' !== $token['type'] || $token['closing'] || 'img' !== $token['name'] ) {
+				$out .= (string) $token['raw'];
+				continue;
+			}
+
+			$tag = (string) $token['raw'];
+
+			if ( MMF_Assets::has_attribute( $tag, 'src' ) ) {
+				$src = (string) ( MMF_Assets::attributes( $tag )['src'] ?? '' );
+				$new = self::webp_url( $src );
+
+				if ( $new !== $src ) {
+					$tag = MMF_Assets::replace_attribute( $tag, 'src', $new );
+				}
+			}
+
+			if ( MMF_Assets::has_attribute( $tag, 'srcset' ) ) {
+				$srcset = (string) ( MMF_Assets::attributes( $tag )['srcset'] ?? '' );
+				$tag    = MMF_Assets::replace_attribute( $tag, 'srcset', self::rewrite_srcset( $srcset ) );
+			}
+
+			$out .= $tag;
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Rewrites every candidate of a srcset consistently.
+	 *
+	 * @param string $srcset Value.
+	 */
+	public static function rewrite_srcset( string $srcset ): string {
+		$parts = explode( ',', $srcset );
+
+		foreach ( $parts as $index => $part ) {
+			$part = trim( $part );
+
+			if ( '' === $part ) {
+				unset( $parts[ $index ] );
+				continue;
+			}
+
+			$bits = preg_split( '/\s+/', $part );
+			$url  = (string) ( $bits[0] ?? '' );
+
+			if ( '' !== $url ) {
+				$bits[0] = self::webp_url( $url );
+			}
+
+			$parts[ $index ] = implode( ' ', $bits );
+		}
+
+		return implode( ', ', $parts );
+	}
+
+	/**
+	 * WebP URL of an uploads image, or the original.
+	 *
+	 * @param string $url Image URL.
+	 */
+	public static function webp_url( string $url ): string {
+		if ( '' === $url || str_starts_with( $url, 'data:' ) ) {
+			return $url;
+		}
+
+		$path = (string) wp_parse_url( $url, PHP_URL_PATH );
+		$ext  = strtolower( (string) pathinfo( $path, PATHINFO_EXTENSION ) );
+
+		if ( ! in_array( $ext, array( 'jpg', 'jpeg', 'png' ), true ) ) {
+			return $url;
+		}
+
+		$file = MMF_Assets::resolve_path( $url, $ext );
+
+		if ( '' === $file || ! is_file( self::sidecar( $file ) ) ) {
+			return $url;
+		}
+
+		$quote = (string) wp_parse_url( $url, PHP_URL_QUERY );
+		$webp  = preg_replace( '/(\?.*)?$/', '', $url );
+
+		if ( ! is_string( $webp ) ) {
+			return $url;
+		}
+
+		if ( ! isset( self::$counted[ $url ] ) ) {
+			self::$counted[ $url ] = true;
+			self::$served++;
+			self::$saved += max( 0, (int) filesize( $file ) - (int) filesize( self::sidecar( $file ) ) );
+		}
+
+		return $webp . '.webp' . ( '' !== $quote ? '?' . $quote : '' );
+	}
+
+	/**
+	 * Deletes every generated sidecar under uploads.
+	 *
+	 * @return int Number of deleted files.
+	 */
+	public static function delete_all(): int {
+		$uploads = wp_upload_dir( null, false );
+
+		if ( ! is_array( $uploads ) || ! empty( $uploads['error'] ) || empty( $uploads['basedir'] ) ) {
+			return 0;
+		}
+
+		$deleted  = 0;
+		$iterator = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( (string) $uploads['basedir'], FilesystemIterator::SKIP_DOTS ) );
+
+		foreach ( $iterator as $file ) {
+			if ( ! $file->isFile() || ! str_ends_with( strtolower( $file->getFilename() ), '.webp' ) ) {
+				continue;
+			}
+
+			$name = $file->getFilename();
+
+			if ( ! preg_match( '/\.(jpe?g|png)\.webp$/i', $name ) ) {
+				continue;
+			}
+
+			if ( @unlink( $file->getPathname() ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors -- a concurrent cleanup may win.
+				$deleted++;
+			}
+		}
+
+		return $deleted;
+	}
+}
