@@ -256,7 +256,7 @@ final class MMF_Config {
 			// the version), `remove` drops it, `keep` does nothing.
 			'ver_mode'               => array(
 				'type'    => 'choice',
-				'default' => 'hash',
+				'default' => 'remove',
 				'choices' => array( 'hash', 'remove', 'keep' ),
 			),
 			// Inline blocks: minifying `<script>` and `<style>` bodies. An

@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Modern Minify
  * Description:       Минификация CSS, JS и HTML, асинхронная загрузка файлов и обработка Google Fonts.
- * Version:           0.8.14
+ * Version:           0.8.15
  * Requires at least: 7.0
  * Tested up to:      7.1
  * Requires PHP:      8.0
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'MMF_VERSION', '0.8.14' );
+define( 'MMF_VERSION', '0.8.15' );
 
 /**
  * Cache-signature version of the minifiers.
@@ -104,6 +104,12 @@ function mmf_migrate_quality_defaults(): void {
 
 	if ( array() !== $changed ) {
 		MMF_Config::update( $changed );
+	}
+
+	// The owner does not want a query string on asset URLs at all: the hash mode
+	// is switched off once, and an explicit "keep" stays untouched.
+	if ( 'hash' === (string) ( $current['ver_mode'] ?? '' ) ) {
+		MMF_Config::update( array( 'ver_mode' => 'remove' ) );
 	}
 
 	update_option( 'mmf_quality_migrated', '2', false );
