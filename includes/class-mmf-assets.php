@@ -100,7 +100,7 @@ final class MMF_Assets {
 		// loader cannot restore would leave the page without JavaScript.
 		$rocket_js = '';
 
-		if ( ! empty( $settings['rocket_mode'] ) ) {
+		if ( ! empty( $settings['rocket_mode'] ) && empty( $settings['delay_js'] ) ) {
 			$rocket_js = MMF_Loader::script( MMF_Loader::MODE_DOMREADY, 3000, MMF_Loader::MAX_BYTES_ROCKET );
 
 			if ( '' !== $rocket_js && MMF_Loader::csp_blocked( $rocket_js ) ) {
@@ -1148,34 +1148,27 @@ final class MMF_Assets {
 		$force_inline = self::matches( $href, $settings['inline_css_extra'] ?? array() );
 		$force_async  = self::matches( $href, $settings['async_css'] ?? array() );
 
-		// Theme stylesheet out of the critical path (opt-in). The page is hidden
-		// until the stylesheet applies or 1.5 s pass, whichever comes first: the
-		// visitor either sees a styled page or nothing, never bare text.
-		if ( ! empty( $settings['css_async_theme'] ) && false !== strpos( $href, '/wp-content/themes/' ) && self::is_local_url( $href ) && ! self::matches( $href, $settings['exclude_css'] ?? array() ) ) {
-			static $guard_printed = false;
+		// Non-critical stylesheets: the pattern every guide uses, including the
+		// Russian ones the owner sent. A preload fetches without blocking, the
+		// inline handler turns it into a stylesheet when the bytes arrive, and a
+		// noscript copy keeps the page styled without JavaScript. No hiding, no
+		// timers: there is nothing here that can leave a site unstyled or blank —
+		// the previous version could, and did.
+		$async_theme = ! empty( $settings['css_async_theme'] ) && false !== strpos( $href, '/wp-content/themes/' );
 
-			$guard = '';
-
-			if ( ! $guard_printed ) {
-				$guard_printed = true;
-				$guard         = '<style id="mmf-fouc-guard">html{visibility:hidden;animation:mmf-reveal .01s linear 1.5s forwards}@keyframes mmf-reveal{to{visibility:visible}}</style>';
-			}
-
-			$theme_id = 'mmf-theme-preload-' . substr( md5( $href ), 0, 8 );
-			$js       = 'var g=document.getElementById("mmf-fouc-guard");'
-				. 'var show=function(){if(g&&g.parentNode){g.parentNode.removeChild(g);}g=null;};'
-				. 'var p=document.getElementById(' . wp_json_encode( $theme_id ) . ');'
-				. 'if(!p){show();return}'
-				. 'var go=function(){p.rel="stylesheet";show();};'
-				. 'p.addEventListener("load",go);p.addEventListener("error",show);setTimeout(show,1500);';
-			$tag_async = MMF_Loader::script_tag( $js, array( 'id' => 'mmf-theme-css-' . substr( md5( $href ), 0, 8 ), 'data-mmf-theme-css' => '1' ) );
-
-			if ( '' !== $tag_async && ( ! MMF_Loader::csp_present() || MMF_Loader::tag_has_nonce( $tag_async ) ) ) {
-				$result['tag']                 = $guard . '<link rel="preload" as="style" id="' . esc_attr( $theme_id ) . '" href="' . esc_url( $href ) . '" data-mmf-theme-async="1">' . $tag_async;
-				$result['stats']['theme_async'] = 1;
+		if ( ( $async_theme || $force_async ) && self::is_local_url( $href ) && ! self::matches( $href, $settings['exclude_css'] ?? array() ) ) {
+			// The inline handler is what makes this work; a policy that forbids
+			// inline attributes would block it silently, so such a site keeps the
+			// ordinary blocking tag instead.
+			if ( ! MMF_Loader::csp_present() ) {
+				$result['tag'] = '<link rel="preload" as="style" href="' . esc_url( $href ) . '" data-mmf-async-css="1" onload="this.onload=null;this.rel=\'stylesheet\'">'
+					. '<noscript><link rel="stylesheet" href="' . esc_url( $href ) . '"></noscript>';
+				$result['stats']['async_css'] = 1;
 
 				return $result;
 			}
+
+			$result['stats']['async_blocked'] = 1;
 		}
 
 		if ( empty( $settings['minify_css'] ) && ! $force_inline && ! $force_async ) {
@@ -1205,19 +1198,6 @@ final class MMF_Assets {
 			}
 		}
 
-		if ( $force_async && ! self::matches( $href, $settings['exclude_css'] ?? array() ) ) {
-			$js = 'document.addEventListener("DOMContentLoaded",function(){var l=document.createElement("link");l.rel="stylesheet";l.href=' . wp_json_encode( $href ) . ';document.head.appendChild(l);});';
-			$tag_async = MMF_Loader::script_tag( $js, array( 'id' => 'mmf-async-css-' . substr( md5( $href ), 0, 8 ), 'data-mmf-async-css' => '1' ) );
-
-			if ( '' !== $tag_async && ( ! MMF_Loader::csp_present() || MMF_Loader::tag_has_nonce( $tag_async ) ) ) {
-				$result['tag']                = $tag_async;
-				$result['stats']['async_css'] = 1;
-
-				return $result;
-			}
-
-			$result['stats']['async_blocked'] = 1;
-		}
 
 		if ( self::matches( $href, $settings['exclude_css'] ?? array() ) ) {
 			return $result;
@@ -1260,19 +1240,6 @@ final class MMF_Assets {
 		// Asynchronous loading was implemented only inside the script branch and
 		// never ran for a <link>: the file stayed blocking no matter what the
 		// owner put into the list. It is wired here, where stylesheets live.
-		if ( $force_async && ! self::matches( $href, $settings['exclude_css'] ?? array() ) ) {
-			$js = 'document.addEventListener("DOMContentLoaded",function(){var l=document.createElement("link");l.rel="stylesheet";l.href=' . wp_json_encode( $href ) . ';document.head.appendChild(l);});';
-			$tag_async = MMF_Loader::script_tag( $js, array( 'id' => 'mmf-async-css-' . substr( md5( $href ), 0, 8 ), 'data-mmf-async-css' => '1' ) );
-
-			if ( '' !== $tag_async && ( ! MMF_Loader::csp_present() || MMF_Loader::tag_has_nonce( $tag_async ) ) ) {
-				$result['tag']            = $tag_async;
-				$result['stats']['async_css'] = 1;
-
-				return $result;
-			}
-
-			$result['stats']['async_blocked'] = 1;
-		}
 
 		$tag = self::replace_attribute( $tag, 'href', (string) $file['url'] );
 		$tag = self::remove_attribute( $tag, 'integrity' );
