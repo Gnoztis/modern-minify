@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Modern Minify
  * Description:       Минификация CSS, JS и HTML, асинхронная загрузка файлов и обработка Google Fonts.
- * Version:           0.1.0
+ * Version:           0.2.0
  * Requires at least: 7.0
  * Tested up to:      7.1
  * Requires PHP:      8.0
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'MMF_VERSION', '0.1.0' );
+define( 'MMF_VERSION', '0.2.0' );
 define( 'MMF_PLUGIN_FILE', __FILE__ );
 define( 'MMF_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MMF_URL', plugin_dir_url( __FILE__ ) );
@@ -29,17 +29,24 @@ define( 'MMF_URL', plugin_dir_url( __FILE__ ) );
 require_once MMF_DIR . 'includes/class-mmf-config.php';
 require_once MMF_DIR . 'includes/class-mmf-cache.php';
 require_once MMF_DIR . 'includes/class-mmf-minifier.php';
+require_once MMF_DIR . 'includes/class-mmf-html.php';
+require_once MMF_DIR . 'includes/class-mmf-assets.php';
+require_once MMF_DIR . 'includes/class-mmf-stats.php';
+require_once MMF_DIR . 'includes/class-mmf-conflicts.php';
+require_once MMF_DIR . 'includes/class-mmf-notices.php';
+require_once MMF_DIR . 'includes/class-mmf-frontend.php';
 require_once MMF_DIR . 'includes/class-mmf-github-updater.php';
 
 /**
  * Registers the modules of the plugin.
  *
  * Runs on `plugins_loaded` so every other plugin has already declared itself
- * when stage 2 starts filtering their assets. The cache layer only attaches its
- * cron hook here; the output pipeline is wired in a later stage.
+ * when the output pipeline starts looking at their assets.
  */
 function mmf_bootstrap(): void {
 	MMF_Cache::register_hooks();
+	MMF_Notices::register_hooks();
+	MMF_Frontend::instance()->register_hooks();
 
 	if ( class_exists( 'MMF_GitHub_Updater' ) ) {
 		( new MMF_GitHub_Updater() )->register_hooks();
@@ -56,7 +63,7 @@ function mmf_load_textdomain(): void {
 add_action( 'init', 'mmf_load_textdomain' );
 
 /**
- * Registers the option with the Settings API, so a saving screen (stage 2) is
+ * Registers the option with the Settings API, so a saving screen (stage 3) is
  * always filtered by `MMF_Config::sanitize()`.
  */
 add_action( 'admin_init', array( 'MMF_Config', 'register_settings' ) );

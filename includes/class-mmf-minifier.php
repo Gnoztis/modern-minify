@@ -87,6 +87,26 @@ final class MMF_Minifier {
 	}
 
 	/**
+	 * Cache name of a source string under the current settings.
+	 *
+	 * Public because the output pipeline has to build the same URL the
+	 * minification just wrote: the name depends on the settings fingerprint,
+	 * which belongs to this class. The source is normalised exactly as
+	 * `minify()` does it, otherwise a file with leading whitespace would be
+	 * stored under one name and looked up under another.
+	 *
+	 * @param string $source Source code.
+	 * @param string $type   `js` or `css`.
+	 */
+	public static function hash( string $source, string $type ): string {
+		if ( ! class_exists( 'MMF_Cache' ) ) {
+			return '';
+		}
+
+		return MMF_Cache::hash( self::strip_bom( trim( $source ) ), $type, self::fingerprint( $type ) );
+	}
+
+	/**
 	 * Shared pipeline: cache lookup, minification, cache write, fallback.
 	 *
 	 * @param string $source    Source code.
@@ -103,7 +123,7 @@ final class MMF_Minifier {
 		$hash = '';
 
 		if ( $use_cache && class_exists( 'MMF_Cache' ) ) {
-			$hash   = MMF_Cache::hash( $source, $type, self::fingerprint( $type ) );
+			$hash   = self::hash( $source, $type );
 			$cached = MMF_Cache::get( $hash, $type );
 
 			if ( is_string( $cached ) && '' !== $cached ) {

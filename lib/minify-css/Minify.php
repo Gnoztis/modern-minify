@@ -336,7 +336,7 @@ abstract class Minify
         while ($processedOffset < $contentLength) {
             // find first match for all patterns
             foreach ($this->patterns as $i => $pattern) {
-                list($pattern, $replacement) = $pattern;
+                list($pattern, $replacement) = $pattern; // destructuring:ignore -- every element of $this->patterns is array( $pattern, $replacement ), written only by registerPattern().
 
                 // we can safely ignore patterns for positions we've unset earlier,
                 // because we know these won't show up anymore

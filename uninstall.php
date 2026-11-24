@@ -24,6 +24,7 @@ if ( ! function_exists( 'mmf_uninstall_site' ) ) {
 		MMF_Cache::deactivate();
 
 		delete_option( 'mmf_settings' );
+		delete_option( 'mmf_stats' );
 
 		delete_transient( 'mmf_github_release' );
 		delete_transient( 'mmf_github_release_error' );

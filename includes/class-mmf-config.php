@@ -36,7 +36,7 @@ final class MMF_Config {
 	 * rather than coerced; `prepare()` always writes the current number, so the
 	 * stored array tells which rules produced it.
 	 */
-	public const SCHEMA = 1;
+	public const SCHEMA = 2;
 
 	/**
 	 * Upper bound of one exclusion list, in entries.
@@ -95,6 +95,14 @@ final class MMF_Config {
 				'type'    => 'bool',
 				'default' => false,
 			),
+			// Size limit of a stylesheet that may be inlined, in KiB. 0 disables
+			// inlining even when the switch above is on.
+			'inline_css_limit'       => array(
+				'type'    => 'int',
+				'default' => 20,
+				'min'     => 0,
+				'max'     => 5120,
+			),
 			'remove_print_css'       => array(
 				'type'    => 'bool',
 				'default' => false,
@@ -107,6 +115,18 @@ final class MMF_Config {
 				'default' => array(),
 			),
 			'defer_js'               => array(
+				'type'    => 'bool',
+				'default' => false,
+			),
+			// Processed and minified as usual, but never deferred: a script that
+			// must run before the markup it manipulates belongs here.
+			'defer_skip'             => array(
+				'type'    => 'list',
+				'default' => array(),
+			),
+			// Moves local head scripts to the end of the body. Async scripts,
+			// modules and excluded files stay where the theme printed them.
+			'move_scripts_to_footer' => array(
 				'type'    => 'bool',
 				'default' => false,
 			),
