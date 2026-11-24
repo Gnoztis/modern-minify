@@ -76,6 +76,12 @@ final class MMF_Admin {
 		add_action( 'admin_init', array( __CLASS__, 'handle_toggle_test' ) );
 		add_action( 'admin_init', array( __CLASS__, 'handle_apply_recommended' ) );
 		add_action( 'admin_post_mmf_apply_advice', array( __CLASS__, 'handle_apply_advice' ) );
+		// The advisor button lives inside the settings form, and that form
+		// carries `action=update` from settings_fields(). A POST field wins over
+		// the query string in $_REQUEST, so admin-post.php dispatched
+		// `admin_post_update`, found no handler and answered 400 with an empty
+		// message. Handling the flag on admin_init avoids the dispatch entirely.
+		add_action( 'admin_init', array( __CLASS__, 'maybe_handle_apply_advice' ) );
 		add_action( 'admin_init', array( __CLASS__, 'handle_delete_webp' ) );
 		add_action( 'admin_post_mmf_css_action', array( __CLASS__, 'handle_css_action' ) );
 		add_action( 'admin_init', array( __CLASS__, 'handle_convert_avatars' ) );
@@ -1721,6 +1727,21 @@ final class MMF_Admin {
 	}
 
 	/**
+	 * Runs the advice handler when the settings form was submitted by its button.
+	 *
+	 * `settings_fields()` puts `action=update` into the same POST body, and a
+	 * POST field overrides the `?action=` of the form target, so the request
+	 * never reached `admin_post_mmf_apply_advice`. Our own flag is unambiguous.
+	 */
+	public static function maybe_handle_apply_advice(): void {
+		if ( empty( $_POST['mmf_apply_advice'] ) ) {
+			return;
+		}
+
+		self::handle_apply_advice();
+	}
+
+	/**
 	 * Adds the checked advice patterns to the chosen list.
 	 *
 	 * Read-only analysis becomes a change only here, on an explicit POST from
@@ -2890,6 +2911,10 @@ final class MMF_Admin {
 .mmf-wrap .mmf-badge--status{margin-left:0}
 .mmf-wrap .mmf-bool{display:inline-flex;align-items:center;gap:8px;flex-wrap:nowrap;max-width:100%}
 .mmf-wrap .mmf-bool__text{color:var(--mmf-muted);font-size:13px;flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.mmf-wrap .mmf-advisor-table th:nth-child(4),.mmf-wrap .mmf-advisor-table td:nth-child(4){width:170px}
+.mmf-wrap .mmf-advisor-table td{height:auto;max-height:none;overflow:visible}
+.mmf-wrap .mmf-advisor__path,.mmf-wrap .mmf-advisor__reason,.mmf-wrap .mmf-advisor-table .mmf-verdict{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mmf-wrap .mmf-actions-wrap{white-space:nowrap;gap:6px}
 .mmf-wrap .mmf-help{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;border:1px solid var(--mmf-border);background:var(--mmf-bg);color:var(--mmf-muted);cursor:pointer;margin-left:var(--mmf-gap);vertical-align:middle;padding:0}
 .mmf-wrap .mmf-help .dashicons{font-size:18px;width:18px;height:18px}
 .mmf-wrap .mmf-popover{position:absolute;max-width:360px;background:var(--mmf-popover-bg);color:var(--mmf-popover-fg);border:1px solid var(--mmf-border);border-radius:var(--mmf-radius);padding:var(--mmf-gap-2);box-shadow:0 4px 12px rgba(0,0,0,.08);z-index:100001;font-size:13px;box-sizing:border-box}
@@ -3017,7 +3042,7 @@ if(adviceButton){adviceButton.addEventListener("click",function(event){var risky
 var asyncLinks=document.querySelectorAll(".mmf-async-css");
 for(var ai=0;ai<asyncLinks.length;ai++){asyncLinks[ai].addEventListener("click",function(event){if(!window.confirm(__MMF_ASYNC_CSS_PROMPT__)){event.preventDefault();}});}
 var menuButtons=document.querySelectorAll(".mmf-menu-toggle");
-for(var mi=0;mi<menuButtons.length;mi++){menuButtons[mi].addEventListener("click",function(event){event.stopPropagation();var menu=this.nextElementSibling;if(!menu){return}var open=menu.hidden;menu.hidden=!open;this.setAttribute("aria-expanded",open?"true":"false");});}
+for(var mi=0;mi<menuButtons.length;mi++){menuButtons[mi].addEventListener("click",function(event){event.stopPropagation();var menu=this.nextElementSibling;if(!menu){return}if(!menu.hidden){menu.hidden=true;this.setAttribute("aria-expanded","false");return}for(var c=0;c<menuButtons.length;c++){var om=menuButtons[c].nextElementSibling;if(om&&c!==mi){om.hidden=true;menuButtons[c].setAttribute("aria-expanded","false");}}menu.hidden=false;this.setAttribute("aria-expanded","true");menu.style.position="fixed";menu.style.zIndex="100001";var r=this.getBoundingClientRect();var mh=menu.offsetHeight||180;var openUp=(r.bottom+mh+8)>window.innerHeight;menu.style.top=(openUp?(r.top-mh-4):(r.bottom+4))+"px";var l=Math.max(12,Math.min(r.right-menu.offsetWidth,window.innerWidth-12));menu.style.left=l+"px";});}
 document.addEventListener("click",function(event){for(var k=0;k<menuButtons.length;k++){var m=menuButtons[k].nextElementSibling;if(m&&!m.hidden&&!m.contains(event.target)){m.hidden=true;menuButtons[k].setAttribute("aria-expanded","false");}}});
 document.addEventListener("keydown",function(event){if("Escape"!==event.key){return}for(var k=0;k<menuButtons.length;k++){var m=menuButtons[k].nextElementSibling;if(m&&!m.hidden){m.hidden=true;menuButtons[k].setAttribute("aria-expanded","false");menuButtons[k].focus();}}});
 var exampleButtons=document.querySelectorAll(".mmf-examples-toggle");
