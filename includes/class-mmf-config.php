@@ -293,6 +293,16 @@ final class MMF_Config {
 				'type'    => 'bool',
 				'default' => true,
 			),
+			'avatar_webp'            => array(
+				'type'    => 'bool',
+				'default' => true,
+			),
+			'avatar_quality'         => array(
+				'type'    => 'int',
+				'default' => 82,
+				'min'     => 60,
+				'max'     => 95,
+			),
 			// Test mode: the pipeline runs only for administrators, so the site
 			// owner can look at the result on the live site without risking
 			// visitors.

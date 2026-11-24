@@ -41,8 +41,9 @@ final class MMF_Cache {
 	 * Extension per asset type.
 	 */
 	private const EXTENSIONS = array(
-		'js'  => '.min.js',
-		'css' => '.min.css',
+		'js'   => '.min.js',
+		'css'  => '.min.css',
+		'webp' => '.avatar.webp',
 	);
 
 	/**
@@ -62,6 +63,7 @@ final class MMF_Cache {
 	private const PATTERNS = array(
 		'*.min.js',
 		'*.min.css',
+		'*.avatar.webp',
 		'*.fonts.css',
 		'font-*.woff2',
 		'font-*.woff',

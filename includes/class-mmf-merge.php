@@ -45,6 +45,22 @@ final class MMF_Merge {
 	public const MARKER = 'data-mmf-bundle';
 
 	/**
+	 * Why a run was not merged, collected for the status screen.
+	 *
+	 * @var string[]
+	 */
+	private static array $reasons = array();
+
+	/**
+	 * Remembers a split reason once.
+	 *
+	 * @param string $reason Reason key.
+	 */
+	private static function note_reason( string $reason ): void {
+		self::$reasons[] = $reason;
+	}
+
+	/**
 	 * Rewrites the markup, replacing eligible groups with bundle tags.
 	 *
 	 * @param string              $html     Document.
@@ -52,12 +68,16 @@ final class MMF_Merge {
 	 * @return array{html:string,stats:array<string,int>}
 	 */
 	public static function apply( string $html, array $settings ): array {
+		self::$reasons = array();
+
 		$stats = array(
 			'bundles'       => 0,
 			'bundled_files' => 0,
 			'bundle_bytes'  => 0,
 			'css_before'    => 0,
 			'css_after'     => 0,
+			'inline_merged' => 0,
+			'merge_reasons' => array(),
 		);
 
 		if ( '' === $html ) {
@@ -77,7 +97,7 @@ final class MMF_Merge {
 		while ( $index < $count ) {
 			$token = $tokens[ $index ];
 
-			if ( 'tag' !== $token['type'] || $token['closing'] || ! in_array( (string) $token['name'], array( 'link', 'script' ), true ) ) {
+			if ( 'tag' !== $token['type'] || $token['closing'] || ! in_array( (string) $token['name'], array( 'link', 'script', 'style' ), true ) ) {
 				$out  .= (string) $token['raw'];
 				$index++;
 				continue;
@@ -104,6 +124,12 @@ final class MMF_Merge {
 				continue;
 			}
 
+			foreach ( $group['items'] as $member ) {
+				if ( isset( $member['inline'] ) ) {
+					$stats['inline_merged']++;
+				}
+			}
+
 			$stats['bundles']       += 1;
 			$stats['bundled_files'] += count( $group['items'] );
 			$stats['bundle_bytes']  += strlen( $bundle['content'] );
@@ -112,7 +138,8 @@ final class MMF_Merge {
 			$index = $group['last'] + 1;
 		}
 
-		$stats['css_after'] = self::count_stylesheets( $out );
+		$stats['css_after']     = self::count_stylesheets( $out );
+		$stats['merge_reasons'] = array_values( array_unique( self::$reasons ) );
 
 		return array(
 			'html'  => $out,
@@ -246,11 +273,11 @@ final class MMF_Merge {
 				return null;
 			}
 
-			$media = strtolower( trim( (string) ( $attrs['media'] ?? '' ) ) );
+			$media = self::normalize_media( (string) ( $attrs['media'] ?? '' ) );
 
 			// A print stylesheet must stay its own request: merging it with
 			// screen CSS would apply print rules to the screen.
-			if ( '' !== $media && 'all' !== $media && ( str_contains( $media, 'print' ) || str_contains( $media, 'speech' ) ) ) {
+			if ( '' !== $media && ( str_contains( $media, 'print' ) || str_contains( $media, 'speech' ) ) ) {
 				return null;
 			}
 
@@ -265,6 +292,48 @@ final class MMF_Merge {
 				'media' => $media,
 				'type'  => 'css',
 				'last'  => $last,
+			);
+		}
+
+		if ( 'style' === $name ) {
+			if ( empty( $settings['merge_css'] ) ) {
+				return null;
+			}
+
+			// A style block with an id is a JavaScript handle: a theme may read
+			// or rewrite it by id, so the run is deliberately split here.
+			if ( '' !== trim( (string) ( $attrs['id'] ?? '' ) ) ) {
+				self::note_reason( 'inline-id' );
+
+				return null;
+			}
+
+			$media = self::normalize_media( (string) ( $attrs['media'] ?? '' ) );
+
+			if ( '' !== $media && ( str_contains( $media, 'print' ) || str_contains( $media, 'speech' ) ) ) {
+				return null;
+			}
+
+			$content = isset( $tokens[ $index + 1 ] ) && 'content' === $tokens[ $index + 1 ]['type'] ? (string) $tokens[ $index + 1 ]['raw'] : '';
+
+			if ( '' === trim( $content ) ) {
+				return null;
+			}
+
+			// @import has to stay before all other rules and its order matters;
+			// moving it into a bundle changes the cascade.
+			if ( false !== stripos( $content, '@import' ) ) {
+				self::note_reason( 'inline-import' );
+
+				return null;
+			}
+
+			return array(
+				'src'    => '',
+				'inline' => $content,
+				'media'  => $media,
+				'type'   => 'css',
+				'last'   => $last,
 			);
 		}
 
@@ -305,6 +374,19 @@ final class MMF_Merge {
 	}
 
 	/**
+	 * Media attribute normalised for comparison.
+	 *
+	 * Absent, empty and `all` mean the same thing.
+	 *
+	 * @param string $media Media value.
+	 */
+	private static function normalize_media( string $media ): string {
+		$media = strtolower( trim( $media ) );
+
+		return 'all' === $media ? '' : $media;
+	}
+
+	/**
 	 * Reads, minifies and caches one group.
 	 *
 	 * @param array<int,array{src:string,media:string}> $items    Group members.
@@ -331,6 +413,33 @@ final class MMF_Merge {
 		$total = 0;
 
 		foreach ( $items as $item ) {
+			if ( isset( $item['inline'] ) ) {
+				$inline = (string) $item['inline'];
+				$base   = home_url( '/' );
+
+				if ( '' !== $base ) {
+					$inline = MMF_Fonts::absolutize_urls( $base, $inline );
+				}
+
+				$minified = MMF_Minifier::minify_css( $inline );
+
+				if ( ! is_string( $minified ) || '' === trim( $minified ) ) {
+					return array();
+				}
+
+				$total += strlen( $minified );
+
+				if ( $total > $max_bytes ) {
+					self::note_reason( 'size' );
+
+					return array();
+				}
+
+				$parts[] = $minified;
+
+				continue;
+			}
+
 			$path = MMF_Assets::resolve_path( $item['src'], $type );
 
 			if ( '' === $path ) {
@@ -364,6 +473,8 @@ final class MMF_Merge {
 			$total += strlen( $minified );
 
 			if ( $total > $max_bytes ) {
+				self::note_reason( 'size' );
+
 				return array();
 			}
 

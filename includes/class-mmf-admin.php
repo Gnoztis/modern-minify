@@ -41,6 +41,7 @@ final class MMF_Admin {
 	 * Nonce action of the cache reset.
 	 */
 	private const RESET_NONCE = 'mmf_reset_cache';
+	private const ADVICE_NONCE = 'mmf_apply_advice';
 
 	/**
 	 * Nonce action of the test-mode switch in the admin bar.
@@ -66,6 +67,7 @@ final class MMF_Admin {
 		add_action( 'admin_init', array( __CLASS__, 'handle_reset' ) );
 		add_action( 'admin_init', array( __CLASS__, 'handle_toggle_test' ) );
 		add_action( 'admin_init', array( __CLASS__, 'handle_apply_recommended' ) );
+		add_action( 'admin_post_mmf_apply_advice', array( __CLASS__, 'handle_apply_advice' ) );
 	}
 
 	/**
@@ -382,6 +384,10 @@ final class MMF_Admin {
 				self::render_html_note();
 			}
 
+			if ( 'javascript' === $slug ) {
+				self::render_advisor();
+			}
+
 			echo '</div>';
 		}
 		submit_button();
@@ -421,7 +427,7 @@ final class MMF_Admin {
 			'css'        => array( 'minify_css', 'merge_css', 'inline_css', 'inline_css_limit', 'remove_print_css', 'exclude_css' ),
 			'fonts'      => array( 'fonts_method', 'fawesome_method', 'inline_fonts_css' ),
 			'external'   => array(),
-			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_generator', 'remove_emoji', 'ver_mode', 'disable_gravatar' ),
+			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_generator', 'remove_emoji', 'ver_mode', 'disable_gravatar', 'avatar_webp', 'avatar_quality' ),
 			'advanced'   => array( 'cache_ttl', 'cache_max_files', 'cache_max_size', 'test_mode', 'debug', 'merge_max_files', 'merge_max_size' ),
 		);
 	}
@@ -585,6 +591,14 @@ final class MMF_Admin {
 				__( 'Не загружать граватары (локальная заглушка)', 'modern-minify' ),
 				__( 'Граватары заменяются локальной заглушкой; аватары, заданные другим плагином (загруженный файл, uploads, data URI, свой домен), не затрагиваются. Админка и письма не меняются.', 'modern-minify' ),
 			),
+			'avatar_webp'            => array(
+				__( 'Отдавать локальные аватары в WebP', 'modern-minify' ),
+				__( 'Только загруженные JPEG и PNG на своём домене и только когда браузер принимает WebP; исходный файл не меняется, копия живёт в кеше. GIF и SVG не трогаются.', 'modern-minify' ),
+			),
+			'avatar_quality'         => array(
+				__( 'Качество WebP для аватаров', 'modern-minify' ),
+				__( 'От 60 до 95; меньше — легче файл. Действует на новые копии.', 'modern-minify' ),
+			),
 			'external_max_size'      => array(
 				__( 'Предел размера внешнего файла, МиБ', 'modern-minify' ),
 				__( 'Файл больше предела не скачивается: тег остаётся исходным.', 'modern-minify' ),
@@ -670,6 +684,7 @@ final class MMF_Admin {
 		$name  = 'mmf_settings[' . $key . ']';
 		$value = MMF_Config::get( $key );
 		$type  = (string) ( $field['type'] ?? 'bool' );
+		$unsupported = in_array( $key, array( 'avatar_webp', 'avatar_quality' ), true ) && ! MMF_Avatars::supports_webp();
 
 		echo '<tr class="' . ( 'bool' === $type ? 'mmf-row--bool' : 'mmf-row' ) . '"><th scope="row">';
 		echo '<label for="' . esc_attr( $id ) . '">' . esc_html( $label );
@@ -684,7 +699,7 @@ final class MMF_Admin {
 
 			// The checkbox and its description share one line; clicking the text
 			// toggles the box because both are inside the label.
-			echo '<label class="mmf-bool"><input type="checkbox" id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" value="1"' . ( $value ? ' checked="checked"' : '' ) . ' />';
+			echo '<label class="mmf-bool"><input type="checkbox" id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" value="1"' . ( $value ? ' checked="checked"' : '' ) . ( $unsupported ? ' disabled="disabled"' : '' ) . ' />';
 
 			if ( '' !== $help ) {
 				echo '<span class="mmf-bool__text description">' . esc_html( $help ) . '</span>';
@@ -696,12 +711,13 @@ final class MMF_Admin {
 			echo '<textarea id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" rows="5" class="large-text code">' . esc_textarea( $lines ) . '</textarea>';
 		} elseif ( 'int' === $type ) {
 			printf(
-				'<input type="number" id="%s" name="%s" value="%d" min="%d" max="%d" class="small-text" />',
+				'<input type="number" id="%s" name="%s" value="%d" min="%d" max="%d" class="small-text"%s />',
 				esc_attr( $id ),
 				esc_attr( $name ),
 				(int) $value,
 				(int) $field['min'],
-				(int) $field['max']
+				(int) $field['max'],
+				$unsupported ? ' disabled="disabled"' : ''
 			);
 		} else {
 			$labels = self::choice_labels();
@@ -718,6 +734,10 @@ final class MMF_Admin {
 			}
 
 			echo '</select>';
+		}
+
+		if ( $unsupported ) {
+			echo '<p class="description">' . esc_html__( 'На этом сервере нет WebP (GD или Imagick), поэтому настройка недоступна и ничего не меняет.', 'modern-minify' ) . '</p>';
 		}
 
 		echo self::recommended_warning( $key, $value );
@@ -770,10 +790,28 @@ final class MMF_Admin {
 				__( 'Пакетов собрано', 'modern-minify' )       => (string) (int) $stats['bundles'],
 				__( 'CSS-файлов: было → стало', 'modern-minify' ) => ( 0 === (int) $stats['last_css_before'] && 0 === (int) $stats['last_css_after'] ) ? '—' : (int) $stats['last_css_before'] . ' → ' . (int) $stats['last_css_after'],
 				__( 'Файлов в пакетах', 'modern-minify' )      => (string) (int) $stats['bundled_files'],
+				__( 'Инлайн-стилей в пакетах', 'modern-minify' ) => (string) (int) $stats['inline_merged'],
 				__( 'Запросов сэкономлено', 'modern-minify' )  => (string) max( 0, (int) $stats['bundled_files'] - (int) $stats['bundles'] ),
 				__( 'Размер пакетов, КБ', 'modern-minify' )     => (string) (int) round( (int) $stats['bundle_bytes'] / 1024 ),
 			)
 		);
+
+		$reasons = isset( $stats['merge_reasons'] ) && is_array( $stats['merge_reasons'] ) ? $stats['merge_reasons'] : array();
+
+		if ( array() !== $reasons ) {
+			$labels = array(
+				'inline-id'     => __( 'инлайн-стиль с id', 'modern-minify' ),
+				'inline-import' => __( 'инлайн-стиль с @import', 'modern-minify' ),
+				'size'          => __( 'превышен размер пакета', 'modern-minify' ),
+			);
+			$parts  = array();
+
+			foreach ( $reasons as $reason ) {
+				$parts[] = (string) ( $labels[ $reason ] ?? $reason );
+			}
+
+			echo '<p class="description">' . esc_html( sprintf( __( 'Не объединено: %s.', 'modern-minify' ), implode( ', ', $parts ) ) ) . '</p>';
+		}
 
 		self::status_group(
 			__( 'Внешние файлы', 'modern-minify' ),
@@ -785,6 +823,10 @@ final class MMF_Admin {
 				__( 'Предупреждений о шрифтах', 'modern-minify' ) => (string) (int) $stats['font_warnings'],
 				__( 'CSS шрифтов отдано файлом', 'modern-minify' ) => (string) (int) $stats['fonts_files'],
 				__( 'Аватаров заменено', 'modern-minify' )        => (string) (int) $stats['gravatar'],
+				__( 'Аватаров в WebP', 'modern-minify' )           => (string) (int) $stats['avatar_webp'],
+				__( 'Экономия WebP, КБ', 'modern-minify' )         => (string) (int) round( (int) $stats['avatar_saved'] / 1024 ),
+				__( 'Ошибок WebP', 'modern-minify' )               => (string) (int) $stats['avatar_errors'],
+				__( 'WebP на сервере', 'modern-minify' )           => MMF_Avatars::supports_webp() ? __( 'доступен', 'modern-minify' ) : __( 'недоступен', 'modern-minify' ),
 			)
 		);
 
@@ -1341,6 +1383,7 @@ final class MMF_Admin {
 			'test-on'     => __( 'Тестовый режим включён.', 'modern-minify' ),
 			'test-off'    => __( 'Тестовый режим выключен.', 'modern-minify' ),
 			'recommended-noop' => __( 'Настройки уже соответствуют рекомендуемым.', 'modern-minify' ),
+			'advice'      => __( 'Выбранные шаблоны добавлены в список, кеш сброшен.', 'modern-minify' ),
 		);
 
 		$message = isset( $messages[ $type ] ) ? (string) $messages[ $type ] : '';
@@ -1402,6 +1445,129 @@ final class MMF_Admin {
 		if ( is_array( $delay_patterns ) && array() !== $delay_patterns ) {
 			echo '<div class="notice notice-info inline"><p>' . esc_html__( 'Rocket-режим откладывает все скрипты, поэтому список Delay JS не действует: если файл попал в оба, побеждает Rocket-режим.', 'modern-minify' ) . '</p></div>';
 		}
+	}
+
+	/**
+	 * Adds the checked advice patterns to the chosen list.
+	 *
+	 * Read-only analysis becomes a change only here, on an explicit POST from
+	 * the advisor button.
+	 */
+	public static function handle_apply_advice(): void {
+		if ( ! current_user_can( self::CAPABILITY ) ) {
+			wp_die( esc_html__( 'Недостаточно прав.', 'modern-minify' ) );
+		}
+
+		check_admin_referer( self::ADVICE_NONCE, 'mmf_advice_nonce' );
+
+		$target = isset( $_POST['mmf_advice_mode'] ) && 'defer' === sanitize_key( (string) wp_unslash( $_POST['mmf_advice_mode'] ) ) ? 'defer_skip' : 'delay_js';
+		$posted = isset( $_POST['mmf_advice_patterns'] ) ? (array) wp_unslash( $_POST['mmf_advice_patterns'] ) : array();
+		$added  = array();
+
+		foreach ( $posted as $pattern ) {
+			if ( ! is_string( $pattern ) ) {
+				continue;
+			}
+
+			$pattern = trim( sanitize_text_field( $pattern ) );
+
+			if ( '' !== $pattern ) {
+				$added[] = $pattern;
+			}
+		}
+
+		$added = array_values( array_unique( $added ) );
+
+		// Only checked patterns are added, and an existing entry is never duplicated.
+		$current = (array) MMF_Config::get( $target, array() );
+		$merged  = array_values( array_unique( array_merge( $current, $added ) ) );
+		$new     = count( $merged ) - count( $current );
+
+		if ( $new > 0 ) {
+			MMF_Config::update( array( $target => $merged ) );
+			$deleted = MMF_Cache::delete_all();
+			MMF_Stats::record_action( sprintf( __( 'Добавлено шаблонов в список: %1$d, кеш сброшен (удалено файлов: %2$d).', 'modern-minify' ), $new, (int) $deleted ) );
+		} else {
+			MMF_Stats::record_action( __( 'Выбранные шаблоны уже есть в списке.', 'modern-minify' ) );
+		}
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'            => self::PAGE,
+					'tab'             => 'javascript',
+					'mmf-toast'       => 'advice',
+					'mmf-advice'      => $new,
+					'mmf-toast-nonce' => wp_create_nonce( self::TOAST_NONCE ),
+				),
+				admin_url( 'options-general.php' )
+			)
+		);
+		exit;
+	}
+
+	/**
+	 * Prints the read-only advice block on the JavaScript tab.
+	 */
+	private static function render_advisor(): void {
+		$stats     = MMF_Stats::all();
+		$resources = isset( $stats['last_resources'] ) && is_array( $stats['last_resources'] ) ? $stats['last_resources'] : array();
+		$analysis  = MMF_Advisor::analyse( $resources );
+
+		echo '<section class="mmf-card mmf-advisor"><h2 class="mmf-section-title">' . esc_html__( 'Что можно отложить', 'modern-minify' ) . '</h2>';
+
+		if ( array() === $analysis['items'] ) {
+			echo '<p class="description">' . esc_html__( 'Данных пока нет: откройте любую страницу сайта.', 'modern-minify' ) . '</p>';
+			echo '</section>';
+
+			return;
+		}
+
+		echo '<p class="mmf-advisor__summary">';
+		echo esc_html(
+			sprintf(
+				/* translators: 1: blocking requests, 2: deferable requests, 3: kilobytes. */
+				__( 'Блокирующих запросов: %1$d, можно отложить: %2$d (≈ %3$s КиБ)', 'modern-minify' ),
+				(int) $analysis['blocking'],
+				(int) $analysis['deferable'],
+				number_format( (float) round( $analysis['bytes'] / 1024, 1 ), 1, '.', ' ' )
+			)
+		);
+		echo '</p>';
+
+		echo '<table class="widefat striped mmf-report-table mmf-advisor-table"><thead><tr>';
+		echo '<th scope="col">' . esc_html__( 'Ресурс', 'modern-minify' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Размер', 'modern-minify' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Вердикт', 'modern-minify' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Отложить', 'modern-minify' ) . '</th>';
+		echo '</tr></thead><tbody>';
+
+		foreach ( $analysis['items'] as $item ) {
+			$verdict = (string) $item['verdict'];
+
+			echo '<tr><td><code>' . esc_html( (string) $item['name'] ) . '</code><br /><span class="description">' . esc_html( (string) $item['url'] ) . '</span></td>';
+			echo '<td>' . esc_html( $item['size'] > 0 ? size_format( (int) $item['size'] ) : '—' ) . '</td>';
+			echo '<td><span class="mmf-verdict mmf-verdict--' . esc_attr( $verdict ) . '">' . esc_html( MMF_Advisor::verdict_label( $verdict ) ) . '</span><br /><span class="description">' . esc_html( MMF_Advisor::reason_label( (string) $item['reason'] ) ) . '</span></td>';
+			echo '<td>';
+
+			if ( MMF_Advisor::CAN === $verdict ) {
+				echo '<label class="mmf-bool"><input type="checkbox" name="mmf_advice_patterns[]" value="' . esc_attr( (string) $item['pattern'] ) . '" checked="checked" /> <span class="mmf-bool__text description">' . esc_html__( 'добавить', 'modern-minify' ) . '</span></label>';
+			} else {
+				echo '—';
+			}
+
+			echo '</td></tr>';
+		}
+
+		echo '</tbody></table>';
+
+		echo '<p class="mmf-advisor__actions">';
+		echo '<select name="mmf_advice_mode"><option value="delay">' . esc_html__( 'Delay JS', 'modern-minify' ) . '</option><option value="defer">' . esc_html__( 'Не откладывать (defer_skip)', 'modern-minify' ) . '</option></select> ';
+		echo '<button type="submit" class="button button-primary" name="mmf_apply_advice" value="1" formaction="' . esc_url( admin_url( 'admin-post.php?action=mmf_apply_advice' ) ) . '"' . ( 0 === (int) $analysis['deferable'] ? ' disabled="disabled"' : '' ) . '>' . esc_html__( 'Отсрочить выбранные', 'modern-minify' ) . '</button>';
+		echo '<input type="hidden" name="mmf_advice_nonce" value="' . esc_attr( wp_create_nonce( self::ADVICE_NONCE ) ) . '" />';
+		echo '</p>';
+		echo '<p class="description">' . esc_html__( 'Настройки не меняются, пока вы не нажмёте кнопку. Будут добавлены только отмеченные шаблоны.', 'modern-minify' ) . '</p>';
+		echo '</section>';
 	}
 
 	/**
@@ -1468,6 +1634,13 @@ final class MMF_Admin {
 .mmf-wrap .mmf-alert--error{border-color:var(--mmf-err-fg);background:var(--mmf-err-bg);color:var(--mmf-err-fg)}
 .mmf-wrap .mmf-alert p{margin:0}
 .mmf-wrap .mmf-badge{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;background:var(--mmf-badge-bg);color:var(--mmf-badge-fg);font-size:11px;line-height:1.7;vertical-align:baseline;white-space:nowrap}
+.mmf-wrap .mmf-verdict{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap}
+.mmf-wrap .mmf-verdict--can{background:#edfaef;color:#0a5c1c}
+.mmf-wrap .mmf-verdict--risky{background:#fcf9e8;color:#7a4b00}
+.mmf-wrap .mmf-verdict--cannot{background:#fcf0f1;color:#7a0f0f}
+.mmf-wrap .mmf-verdict--done{background:#f0f0f1;color:#3c434a}
+.mmf-wrap .mmf-advisor__summary{font-weight:600}
+.mmf-wrap .mmf-advisor__actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0 4px}
 .mmf-wrap .mmf-recommend-warning{display:flex;align-items:flex-start;gap:6px;margin:8px 0 0;padding:8px 12px;border-radius:var(--mmf-radius);background:var(--mmf-warn-bg);color:var(--mmf-warn-fg);font-size:13px;max-width:100%;box-sizing:border-box}
 .mmf-wrap .mmf-recommend-warning .dashicons{font-size:16px;width:16px;height:16px;margin-top:2px;color:#b26200}
 .mmf-wrap .mmf-card .widefat{width:100%;max-width:100%}

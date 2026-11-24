@@ -66,6 +66,9 @@ final class MMF_Stats {
 			'last_css_after'     => 0,
 			'rocket'             => 0,
 			'gravatar'           => 0,
+			'avatar_webp'        => 0,
+			'avatar_saved'       => 0,
+			'avatar_errors'      => 0,
 			'bundles'            => 0,
 			'bundled_files'      => 0,
 			'bundle_bytes'       => 0,
@@ -77,6 +80,9 @@ final class MMF_Stats {
 			'fonts_files'        => 0,
 			'last_external'      => array(),
 			'last_scripts'       => array(),
+			'last_resources'     => array(),
+			'inline_merged'      => 0,
+			'merge_reasons'      => array(),
 			'last_defer'         => array( 'allowed' => false, 'reason' => '', 'blockers' => array() ),
 			'updated'            => 0,
 		);
@@ -106,6 +112,10 @@ final class MMF_Stats {
 				$known[ $key ] = self::sanitize_report( $value );
 			} elseif ( 'last_scripts' === $key ) {
 				$known[ $key ] = self::sanitize_scripts( $value );
+			} elseif ( 'last_resources' === $key ) {
+				$known[ $key ] = self::sanitize_resources( $value );
+			} elseif ( 'merge_reasons' === $key ) {
+				$known[ $key ] = self::sanitize_reasons( $value );
 			} elseif ( 'last_defer' === $key ) {
 				$known[ $key ] = self::sanitize_defer( $value );
 			} elseif ( is_bool( $value ) ) {
@@ -143,6 +153,16 @@ final class MMF_Stats {
 				continue;
 			}
 
+			if ( 'last_resources' === $key ) {
+				$clean[ $key ] = self::sanitize_resources( $count );
+				continue;
+			}
+
+			if ( 'merge_reasons' === $key ) {
+				$clean[ $key ] = self::sanitize_reasons( $count );
+				continue;
+			}
+
 			if ( 'last_defer' === $key ) {
 				$clean[ $key ] = self::sanitize_defer( $count );
 				continue;
@@ -165,7 +185,7 @@ final class MMF_Stats {
 		}
 
 		foreach ( $clean as $key => $count ) {
-			if ( 'last_delayed' === $key || 'last_external' === $key || 'last_scripts' === $key || 'last_defer' === $key ) {
+			if ( 'last_delayed' === $key || 'last_external' === $key || 'last_scripts' === $key || 'last_resources' === $key || 'last_defer' === $key || 'merge_reasons' === $key ) {
 				// Snapshots of the last counted page, not running totals.
 				$stats[ $key ] = $count;
 				continue;
@@ -180,6 +200,78 @@ final class MMF_Stats {
 
 		// Not autoloaded: read once on the admin screen, never on a page view.
 		update_option( self::OPTION, $stats, false );
+	}
+
+	/**
+	 * Normalises the merge split reasons.
+	 *
+	 * @param mixed $value Raw value.
+	 * @return string[]
+	 */
+	private static function sanitize_reasons( $value ): array {
+		$allowed = array( 'inline-id', 'inline-import', 'size' );
+		$list    = array();
+
+		foreach ( (array) $value as $reason ) {
+			if ( is_string( $reason ) && in_array( $reason, $allowed, true ) ) {
+				$list[] = $reason;
+			}
+		}
+
+		return array_values( array_unique( $list ) );
+	}
+
+	/**
+	 * Normalises the resource list of the last page.
+	 *
+	 * @param mixed $value Raw stored or reported value.
+	 * @return array<int,array{kind:string,url:string,name:string,mode:string,module:bool,inline_after:bool,size:int,media:string,position:int}>
+	 */
+	private static function sanitize_resources( $value ): array {
+		if ( ! is_array( $value ) ) {
+			return array();
+		}
+
+		$kinds = array( 'js', 'css' );
+		$modes = array( 'normal', 'defer', 'async', 'delayed', 'inline', 'rocket' );
+		$list  = array();
+
+		foreach ( $value as $entry ) {
+			if ( ! is_array( $entry ) ) {
+				continue;
+			}
+
+			$kind = isset( $entry['kind'] ) && is_string( $entry['kind'] ) ? sanitize_key( $entry['kind'] ) : '';
+			$mode = isset( $entry['mode'] ) && is_string( $entry['mode'] ) ? sanitize_key( $entry['mode'] ) : '';
+
+			if ( ! in_array( $kind, $kinds, true ) ) {
+				continue;
+			}
+
+			if ( ! in_array( $mode, $modes, true ) ) {
+				$mode = 'normal';
+			}
+
+			$url = isset( $entry['url'] ) && is_string( $entry['url'] ) ? esc_url_raw( $entry['url'] ) : '';
+
+			$list[] = array(
+				'kind'         => $kind,
+				'url'          => mb_substr( $url, 0, 2000 ),
+				'name'         => isset( $entry['name'] ) && is_string( $entry['name'] ) ? mb_substr( sanitize_text_field( $entry['name'] ), 0, 200 ) : '',
+				'mode'         => $mode,
+				'module'       => ! empty( $entry['module'] ),
+				'inline_after' => ! empty( $entry['inline_after'] ),
+				'size'         => isset( $entry['size'] ) && is_numeric( $entry['size'] ) ? max( 0, (int) $entry['size'] ) : 0,
+				'media'        => isset( $entry['media'] ) && is_string( $entry['media'] ) ? mb_substr( sanitize_text_field( $entry['media'] ), 0, 60 ) : '',
+				'position'     => isset( $entry['position'] ) && is_numeric( $entry['position'] ) ? (int) $entry['position'] : count( $list ) + 1,
+			);
+
+			if ( count( $list ) >= 200 ) {
+				break;
+			}
+		}
+
+		return $list;
 	}
 
 	/**

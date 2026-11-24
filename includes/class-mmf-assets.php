@@ -158,6 +158,7 @@ final class MMF_Assets {
 		$rocket_used    = false;
 		$rocket_printed = false;
 		$scripts        = array();
+		$resources      = array();
 
 		for ( $index = 0; $index < $count; $index++ ) {
 			$token = $tokens[ $index ];
@@ -215,6 +216,26 @@ final class MMF_Assets {
 					)
 				);
 
+				$link_attrs = self::attributes( (string) $token['raw'] );
+				$link_rel   = strtolower( (string) ( $link_attrs['rel'] ?? '' ) );
+
+				if ( str_contains( $link_rel, 'stylesheet' ) ) {
+					$link_href = (string) ( $link_attrs['href'] ?? '' );
+					$link_file = self::resolve_path( $link_href, 'css' );
+
+					$resources[] = array(
+						'kind'         => 'css',
+						'url'          => $link_href,
+						'name'         => basename( (string) wp_parse_url( $link_href, PHP_URL_PATH ) ),
+						'mode'         => 'normal',
+						'module'       => false,
+						'inline_after' => false,
+						'size'         => '' !== $link_file ? (int) @filesize( $link_file ) : 0,
+						'media'        => (string) ( $link_attrs['media'] ?? '' ),
+						'position'     => count( $resources ) + 1,
+					);
+				}
+
 				$out    .= $result['tag'];
 				$stats   = self::merge_stats( $stats, $result['stats'] );
 				continue;
@@ -255,12 +276,58 @@ final class MMF_Assets {
 				$rocket_used = true;
 			}
 
-			if ( 'script' === $name && '' !== (string) ( $result['tag'] ?? '' ) ) {
-				$scripts[] = array(
-					'name'     => (string) ( $result['name'] ?? 'inline' ),
-					'mode'     => (string) ( $result['mode'] ?? 'normal' ),
-					'position' => count( $scripts ) + 1,
-				);
+			if ( 'script' === $name ) {
+				$raw = (string) ( $result['tag'] ?? '' );
+
+				if ( '' !== $raw ) {
+					$attrs    = self::attributes( $raw );
+					$orig     = self::attributes( (string) $token['raw'] );
+					$type     = strtolower( trim( (string) ( $attrs['type'] ?? '' ) ) );
+					$position = count( $resources ) + 1;
+
+					$scripts[] = array(
+						'name'     => (string) ( $result['name'] ?? 'inline' ),
+						'mode'     => (string) ( $result['mode'] ?? 'normal' ),
+						'position' => count( $scripts ) + 1,
+					);
+
+					$resources[] = array(
+						'kind'         => 'js',
+						'url'          => (string) ( $orig['src'] ?? ( $attrs['src'] ?? '' ) ),
+						'name'         => (string) ( $result['name'] ?? 'inline' ),
+						'mode'         => (string) ( $result['mode'] ?? 'normal' ),
+						'module'       => str_contains( $type, 'module' ),
+						'inline_after' => false,
+						'size'         => 0,
+						'media'        => '',
+						'position'     => $position,
+					);
+				}
+			} elseif ( 'link' === $name ) {
+				$attrs = self::attributes( (string) $token['raw'] );
+				$rel   = strtolower( (string) ( $attrs['rel'] ?? '' ) );
+
+				if ( str_contains( $rel, 'stylesheet' ) ) {
+					$href = (string) ( $attrs['href'] ?? '' );
+					$size = 0;
+					$file = self::resolve_path( $href, 'css' );
+
+					if ( '' !== $file ) {
+						$size = (int) @filesize( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- a missing file is reported by the size staying 0.
+					}
+
+					$resources[] = array(
+						'kind'         => 'css',
+						'url'          => $href,
+						'name'         => basename( (string) wp_parse_url( $href, PHP_URL_PATH ) ),
+						'mode'         => 'normal',
+						'module'       => false,
+						'inline_after' => false,
+						'size'         => $size,
+						'media'        => (string) ( $attrs['media'] ?? '' ),
+						'position'     => count( $resources ) + 1,
+					);
+				}
 			}
 
 			// A footer move takes the whole element out of the head, so the
@@ -315,10 +382,31 @@ final class MMF_Assets {
 			$out = self::rewrite_preloads( $out );
 		}
 
+		$total = count( $resources );
+
+		for ( $i = 0; $i < $total; $i++ ) {
+			if ( 'js' !== ( $resources[ $i ]['kind'] ?? '' ) || 'inline' === ( $resources[ $i ]['mode'] ?? '' ) ) {
+				continue;
+			}
+
+			for ( $j = $i + 1; $j < $total; $j++ ) {
+				if ( 'js' !== ( $resources[ $j ]['kind'] ?? '' ) ) {
+					continue;
+				}
+
+				if ( 'inline' !== ( $resources[ $j ]['mode'] ?? '' ) ) {
+					break;
+				}
+
+				$resources[ $i ]['inline_after'] = true;
+			}
+		}
+
 		// The status screen lists the external hosts of the page just rewritten.
 		$stats = self::merge_stats( $stats, $merge_stats );
 		$stats['external_report'] = MMF_External::report();
 		$stats['last_scripts']    = $scripts;
+		$stats['last_resources']  = $resources;
 		$stats['last_defer']      = $defer_state;
 
 		return array(
@@ -357,6 +445,11 @@ final class MMF_Assets {
 	 */
 	private static function merge_stats( array $total, array $delta ): array {
 		foreach ( $delta as $key => $value ) {
+			if ( is_array( $value ) ) {
+				$total[ $key ] = $value;
+				continue;
+			}
+
 			$total[ $key ] = (int) ( $total[ $key ] ?? 0 ) + (int) $value;
 		}
 
@@ -546,6 +639,8 @@ final class MMF_Assets {
 
 		if ( self::has_attribute( $tag, 'async' ) ) {
 			$result['mode'] = 'async';
+		} elseif ( self::has_attribute( $tag, 'defer' ) && 'defer' !== $result['mode'] ) {
+			$result['mode'] = 'defer';
 		}
 
 		$result['name'] = basename( (string) wp_parse_url( $src, PHP_URL_PATH ) );

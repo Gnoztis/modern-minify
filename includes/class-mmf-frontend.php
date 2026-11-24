@@ -261,11 +261,15 @@ final class MMF_Frontend {
 			$stats['last_css_before'] = (int) ( $assets['stats']['css_before'] ?? 0 );
 			$stats['last_css_after']  = (int) ( $assets['stats']['css_after'] ?? 0 );
 			$stats['last_scripts'] = is_array( $assets['stats']['last_scripts'] ?? null ) ? $assets['stats']['last_scripts'] : array();
+			$stats['last_resources'] = is_array( $assets['stats']['last_resources'] ?? null ) ? $assets['stats']['last_resources'] : array();
 			$stats['last_defer']   = is_array( $assets['stats']['last_defer'] ?? null ) ? $assets['stats']['last_defer'] : array();
 
 			// `get_avatar` runs while the page is rendered, before this buffer is
 			// processed, so the counter already holds the page's number.
 			$stats['gravatar'] = MMF_Gravatar::count();
+			$stats['avatar_webp']   = class_exists( 'MMF_Avatars' ) ? MMF_Avatars::converted() : 0;
+			$stats['avatar_saved']  = class_exists( 'MMF_Avatars' ) ? MMF_Avatars::saved() : 0;
+			$stats['avatar_errors'] = class_exists( 'MMF_Avatars' ) ? MMF_Avatars::errors() : 0;
 
 			MMF_Stats::record( $stats );
 
