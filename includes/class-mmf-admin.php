@@ -2689,6 +2689,11 @@ final class MMF_Admin {
 		$resources = isset( $stats['last_resources'] ) && is_array( $stats['last_resources'] ) ? $stats['last_resources'] : array();
 		$analysis  = MMF_Advisor::analyse( $resources );
 
+		// The scripts table must not list stylesheets: analyse() returns both kinds.
+		$analysis['items'] = array_values( array_filter( $analysis['items'], static function ( $row ) {
+			return 'js' === ( $row['kind'] ?? 'js' );
+		} ) );
+
 		usort(
 			$analysis['items'],
 			static function ( $left, $right ) {

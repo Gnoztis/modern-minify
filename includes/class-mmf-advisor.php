@@ -283,6 +283,7 @@ final class MMF_Advisor {
 
 		return array(
 			'url'      => $url,
+			'kind'     => $kind,
 			'name'     => '' !== $name ? $name : self::basename( $url ),
 			'size'     => (int) ( $resource['size'] ?? 0 ),
 			'after'    => (int) ( $resource['bytes_after'] ?? 0 ),
