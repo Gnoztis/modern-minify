@@ -1650,7 +1650,12 @@ final class MMF_Admin {
 			foreach ( $hits as $hit ) {
 				foreach ( $critical as $needle ) {
 					if ( false !== stripos( $hit, $needle ) ) {
-						$reason = __( 'скрипт темы, jQuery или ядра WordPress', 'modern-minify' );
+						/* translators: 1: number of matched files, 2: the file that makes the pattern critical. */
+						$reason = sprintf(
+							__( 'шаблон накрывает %1$d файлов, включая %2$s (тема, jQuery или ядро WordPress) — укажите полный путь', 'modern-minify' ),
+							count( $hits ),
+							basename( (string) wp_parse_url( $hit, PHP_URL_PATH ) )
+						);
 						break 2;
 					}
 				}
