@@ -115,6 +115,14 @@ final class MMF_Config {
 			),
 			// Size limit of a stylesheet that may be inlined, in KiB. 0 disables
 			// inlining even when the switch above is on.
+			'inline_css_extra'       => array(
+				'type'    => 'list',
+				'default' => array(),
+			),
+			'async_css'              => array(
+				'type'    => 'list',
+				'default' => array(),
+			),
 			'inline_css_limit'       => array(
 				'type'    => 'int',
 				'default' => 20,

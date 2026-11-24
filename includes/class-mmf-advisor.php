@@ -219,8 +219,21 @@ final class MMF_Advisor {
 		} elseif ( 'css' === $kind ) {
 			$path = strtolower( (string) wp_parse_url( $url, PHP_URL_PATH ) );
 			$acts = (string) ( $resource['action'] ?? '' );
+			$href = (string) ( $resource['url'] ?? '' );
 
-			if ( in_array( $acts, array( 'bundled', 'inlined', 'removed' ), true ) ) {
+			if ( '' === $href ) {
+				$verdict = self::CANNOT;
+				$reason  = 'unknown-source';
+			} elseif ( MMF_Assets::matches( $href, MMF_Config::get( 'exclude_css', array() ) ) ) {
+				$verdict = self::DONE;
+				$reason  = 'excluded';
+			} elseif ( MMF_Assets::matches( $href, MMF_Config::get( 'async_css', array() ) ) ) {
+				$verdict = self::DONE;
+				$reason  = 'async-css';
+			} elseif ( MMF_Assets::matches( $href, MMF_Config::get( 'inline_css_extra', array() ) ) ) {
+				$verdict = self::DONE;
+				$reason  = 'inlined-css';
+			} elseif ( in_array( $acts, array( 'bundled', 'inlined', 'removed', 'async' ), true ) ) {
 				$verdict = self::DONE;
 				$reason  = 'optimized';
 			} elseif ( str_contains( $path, '/themes/' ) ) {
@@ -275,6 +288,7 @@ final class MMF_Advisor {
 			'after'    => (int) ( $resource['bytes_after'] ?? 0 ),
 			'action'   => (string) ( $resource['action'] ?? '' ),
 			'files'    => array(),
+			'unknown'  => '' === (string) ( $resource['url'] ?? '' ),
 			'verdict'  => $verdict,
 			'reason'   => $reason,
 			'source'   => $source,
@@ -385,6 +399,17 @@ final class MMF_Advisor {
 	}
 
 	/**
+	 * Whether async CSS can be applied: our inline loader needs to run.
+	 */
+	public static function async_css_available(): bool {
+		if ( ! MMF_Loader::csp_present() ) {
+			return true;
+		}
+
+		return MMF_Loader::tag_has_nonce( MMF_Loader::script_tag( 'var mmfAsyncCss=1;' ) );
+	}
+
+	/**
 	 * Human verdict.
 	 *
 	 * @param string $verdict One of the class constants.
@@ -425,6 +450,10 @@ final class MMF_Advisor {
 			'css-widget'   => __( 'виджет/соцсеть: можно загрузить асинхронно, возможен FOUC', 'modern-minify' ),
 			'css-inline'   => __( 'небольшой файл: встраивание убирает запрос', 'modern-minify' ),
 			'optimized'    => __( 'уже оптимизирован', 'modern-minify' ),
+			'excluded'     => __( 'исключён из обработки', 'modern-minify' ),
+			'async-css'    => __( 'уже загружается асинхронно', 'modern-minify' ),
+			'inlined-css'  => __( 'уже встроен в страницу', 'modern-minify' ),
+			'unknown-source' => __( 'источник неизвестен: страница обработана старой версией', 'modern-minify' ),
 			'bundled'      => __( 'собран в пакет', 'modern-minify' ),
 		);
 

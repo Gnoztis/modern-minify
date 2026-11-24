@@ -525,6 +525,25 @@ final class MMF_Assets {
 		);
 
 		$attributes = self::attributes( $tag );
+
+		$href = (string) ( $attributes['href'] ?? '' );
+
+		if ( str_contains( strtolower( (string) ( $attributes['rel'] ?? '' ) ), 'stylesheet' ) && '' !== $href && MMF_Assets::matches( $href, $settings['async_css'] ?? array() ) && MMF_Assets::is_local_url( $href ) && ! MMF_Assets::matches( $href, $settings['exclude_css'] ?? array() ) ) {
+			$js = 'document.addEventListener("DOMContentLoaded",function(){var l=document.createElement("link");l.rel="stylesheet";l.href=' . wp_json_encode( $href ) . ';document.head.appendChild(l);});';
+			$tag_async = MMF_Loader::script_tag( $js, array( 'id' => 'mmf-async-css-' . substr( md5( $href ), 0, 8 ), 'data-mmf-async-css' => '1' ) );
+
+			if ( '' === $tag_async || ( MMF_Loader::csp_present() && ! MMF_Loader::tag_has_nonce( $tag_async ) ) ) {
+				$result['stats']['async_blocked'] = 1;
+
+				return $result;
+			}
+
+			$result['tag']            = $tag_async;
+			$result['content']        = '';
+			$result['stats']['async_css'] = 1;
+
+			return $result;
+		}
 		$type       = strtolower( trim( (string) ( $attributes['type'] ?? '' ) ) );
 
 		// A bundle is already the minified concatenation of its group: touching
@@ -1088,9 +1107,11 @@ final class MMF_Assets {
 		// Inlining is skipped for a link carrying an id: scripts and plugins use
 		// the id to toggle or replace that exact element. `</style` in the CSS
 		// would end the new element early, so such a file is never inlined.
-		if ( ! empty( $settings['inline_css'] )
-			&& $limit > 0
-			&& strlen( $content ) <= $limit
+		$force_inline = MMF_Assets::matches( (string) ( $attributes['href'] ?? '' ), $settings['inline_css_extra'] ?? array() );
+
+		if ( ( $force_inline || ! empty( $settings['inline_css'] ) )
+			&& ( $force_inline || $limit > 0 )
+			&& strlen( $content ) <= ( $force_inline ? 200000 : $limit )
 			&& ! isset( $attributes['id'] )
 			&& false === stripos( $content, '</style' ) ) {
 			$result['tag'] = '<style' . ( '' !== $media ? ' media="' . esc_attr( $media ) . '"' : '' ) . '>' . $content . '</style>';

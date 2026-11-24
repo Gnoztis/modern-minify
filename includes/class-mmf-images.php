@@ -872,6 +872,33 @@ final class MMF_Images {
 	}
 
 	/**
+	 * Sidecars present on disk: count and bytes.
+	 *
+	 * @return array{files:int,bytes:int}
+	 */
+	public static function disk_stats(): array {
+		$uploads = wp_upload_dir( null, false );
+
+		if ( ! is_array( $uploads ) || ! empty( $uploads['error'] ) || empty( $uploads['basedir'] ) || ! is_dir( (string) $uploads['basedir'] ) ) {
+			return array( 'files' => 0, 'bytes' => 0 );
+		}
+
+		$files = 0;
+		$bytes = 0;
+
+		$iterator = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( (string) $uploads['basedir'], FilesystemIterator::SKIP_DOTS ) );
+
+		foreach ( $iterator as $file ) {
+			if ( $file->isFile() && preg_match( '/\.(jpe?g|png)\.webp$/i', $file->getFilename() ) ) {
+				$files++;
+				$bytes += (int) $file->getSize();
+			}
+		}
+
+		return array( 'files' => $files, 'bytes' => $bytes );
+	}
+
+	/**
 	 * Deletes every generated sidecar under uploads.
 	 *
 	 * @return int Number of deleted files.
@@ -879,7 +906,7 @@ final class MMF_Images {
 	public static function delete_all(): int {
 		$uploads = wp_upload_dir( null, false );
 
-		if ( ! is_array( $uploads ) || ! empty( $uploads['error'] ) || empty( $uploads['basedir'] ) ) {
+		if ( ! is_array( $uploads ) || ! empty( $uploads['error'] ) || empty( $uploads['basedir'] ) || ! is_dir( (string) $uploads['basedir'] ) ) {
 			return 0;
 		}
 

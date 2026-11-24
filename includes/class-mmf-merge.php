@@ -285,7 +285,7 @@ final class MMF_Merge {
 
 			$src = (string) ( $attrs['href'] ?? '' );
 
-			if ( '' === $src || ! MMF_Assets::is_local_url( $src ) || MMF_Assets::matches( $src, $settings['exclude_css'] ?? array() ) ) {
+			if ( '' === $src || ! MMF_Assets::is_local_url( $src ) || MMF_Assets::matches( $src, $settings['exclude_css'] ?? array() ) || MMF_Assets::matches( $src, $settings['async_css'] ?? array() ) || MMF_Assets::matches( $src, $settings['inline_css_extra'] ?? array() ) ) {
 				return null;
 			}
 
