@@ -2768,6 +2768,10 @@ final class MMF_Admin {
 				echo '<label class="mmf-bool mmf-advisor-action"><input type="checkbox" class="mmf-advice-pattern' . ( $risky ? ' mmf-advice-risky' : '' ) . '" name="mmf_advice_patterns[]" value="' . esc_attr( $pattern ) . '" checked="checked" title="' . esc_attr( $pattern ) . '" /> <span class="mmf-bool__text">' . esc_html__( 'Отложить', 'modern-minify' ) . '</span></label>';
 			} elseif ( $blocked ) {
 				echo '<span class="description">' . esc_html__( 'жёсткое исключение, не откладывается', 'modern-minify' ) . '</span>';
+			} elseif ( MMF_Advisor::DONE === $verdict ) {
+				// Already deferred or already optimised: nothing to tick, and a
+				// bare dash made people wonder whether it was deferred at all.
+				echo '<span class="description">' . esc_html__( 'уже применено', 'modern-minify' ) . '</span>';
 			} else {
 				echo '<span class="description">' . esc_html__( '—', 'modern-minify' ) . '</span>';
 			}
