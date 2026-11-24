@@ -2430,11 +2430,7 @@ final class MMF_Admin {
 		// The advisor writes a pattern here, not a bare URL: the stored value is
 		// matched against the full address, so a scheme-less path or a full URL
 		// from the page would never match. Normalise both into `*<path>*`.
-		$path = (string) wp_parse_url( $pattern, PHP_URL_PATH );
-
-		if ( '' !== $path ) {
-			$pattern = $path;
-		}
+		$pattern = MMF_Config::normalize_path_pattern( $pattern );
 
 		$pattern = trim( $pattern, " \t\n\r\0\x0B*" );
 
