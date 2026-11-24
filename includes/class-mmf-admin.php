@@ -2275,40 +2275,59 @@ final class MMF_Admin {
 			return;
 		}
 
-		echo '<div class="mmf-advisor-scroll"><table class="widefat mmf-advisor-table"><thead><tr>';
-		echo '<th scope="col">' . esc_html__( 'Стиль', 'modern-minify' ) . '</th>';
-		echo '<th scope="col">' . esc_html__( 'Размер', 'modern-minify' ) . '</th>';
-		echo '<th scope="col">' . esc_html__( 'Вердикт', 'modern-minify' ) . '</th>';
-		echo '<th scope="col">' . esc_html__( 'Действие', 'modern-minify' ) . '</th>';
-		echo '</tr></thead><tbody>';
+				// A grid instead of a table: the table layout kept fighting the fixed
+		// action column, overflowing the card and clipping the row menu.
+		echo '<div class="mmf-adv-list" role="table" aria-label="' . esc_attr__( 'Стили', 'modern-minify' ) . '">';
+		echo '<div class="mmf-adv-row mmf-adv-row--head" role="row">';
+		echo '<span role="columnheader">' . esc_html__( 'Стиль', 'modern-minify' ) . '</span>';
+		echo '<span role="columnheader">' . esc_html__( 'Размер', 'modern-minify' ) . '</span>';
+		echo '<span role="columnheader">' . esc_html__( 'Вердикт', 'modern-minify' ) . '</span>';
+		echo '<span role="columnheader">' . esc_html__( 'Действие', 'modern-minify' ) . '</span>';
+		echo '</div>';
 
 		foreach ( $analysis['items'] as $item ) {
-			$size = (int) $item['size'] > 0 ? number_format( (float) ( $item['size'] / 1024 ), 1, '.', ' ' ) . ' КБ' : '—';
+			$size    = (int) $item['size'] > 0 ? number_format( (float) ( $item['size'] / 1024 ), 1, '.', ' ' ) . ' КБ' : '—';
+			$name    = (string) ( $item['name'] ?? '' );
+			$url     = (string) ( $item['url'] ?? '' );
+			$verdict = (string) ( $item['verdict'] ?? '' );
 
-			echo '<tr><td><span class="mmf-advisor__name">' . esc_html( (string) $item['name'] ) . '</span> <span class="mmf-advisor__path" title="' . esc_attr( (string) $item['url'] ) . '">' . esc_html( (string) $item['url'] ) . '</span><p class="mmf-advisor__reason">' . esc_html( MMF_Advisor::reason_label( (string) $item['reason'] ) ) . '</p></td>';
-			echo '<td class="mmf-advisor__size">' . esc_html( $size ) . '</td>';
 			$css_reason = (string) ( $item['reason'] ?? '' );
 			$css_labels = array(
-				'css-inline'   => __( 'можно встроить', 'modern-minify' ),
-				'css-widget'   => __( 'можно асинхронно', 'modern-minify' ),
-				'css-plugin'   => __( 'рискованно', 'modern-minify' ),
-				'css-theme'    => __( 'нельзя', 'modern-minify' ),
-				'css-unknown'  => __( 'неизвестно', 'modern-minify' ),
-				// Processed rows must name what actually happened: the generic
-				// "уже отложен" used to appear next to "уже встроен в страницу".
-				'inlined-css'  => __( 'уже встроен', 'modern-minify' ),
-				'async-css'    => __( 'уже отложен', 'modern-minify' ),
-				'bundled'      => __( 'уже в пакете', 'modern-minify' ),
-				'optimized'    => __( 'уже оптимизирован', 'modern-minify' ),
-				'excluded'     => __( 'исключён', 'modern-minify' ),
+				'css-inline'     => __( 'можно встроить', 'modern-minify' ),
+				'css-widget'     => __( 'можно асинхронно', 'modern-minify' ),
+				'css-plugin'     => __( 'рискованно', 'modern-minify' ),
+				'css-theme'      => __( 'нельзя', 'modern-minify' ),
+				'css-unknown'    => __( 'неизвестно', 'modern-minify' ),
+				'inlined-css'    => __( 'уже встроен', 'modern-minify' ),
+				'async-css'      => __( 'уже отложен', 'modern-minify' ),
+				'bundled'        => __( 'уже в пакете', 'modern-minify' ),
+				'optimized'      => __( 'уже оптимизирован', 'modern-minify' ),
+				'excluded'       => __( 'исключён', 'modern-minify' ),
 				'unknown-source' => __( 'источник неизвестен', 'modern-minify' ),
 			);
-			$css_label = $css_labels[ $css_reason ] ?? MMF_Advisor::verdict_label( (string) $item['verdict'] );
-			echo '<td><span class="mmf-verdict mmf-verdict--' . esc_attr( (string) $item['verdict'] ) . '">' . esc_html( $css_label ) . '</span></td>';
-			echo '<td class="mmf-advisor__actions">' . self::css_action_links( $item ) . '</td></tr>';
+			$css_label = $css_labels[ $css_reason ] ?? MMF_Advisor::verdict_label( $verdict );
+			$source    = (string) ( $item['source'] ?? '' );
+
+			echo '<div class="mmf-adv-row" role="row" data-verdict="' . esc_attr( $verdict ) . '" data-search="' . esc_attr( mb_strtolower( $name . ' ' . $url ) ) . '">';
+
+			echo '<div class="mmf-adv-main">';
+			echo '<span class="mmf-adv-name">' . esc_html( $name ) . '</span>';
+
+			if ( '' !== $source ) {
+				echo ' <span class="mmf-source mmf-source--' . esc_attr( $source ) . '">' . esc_html( MMF_Advisor::source_label( $source ) ) . '</span>';
+			}
+
+			echo '<span class="mmf-adv-url" title="' . esc_attr( $url ) . '">' . esc_html( $url ) . '</span>';
+			echo '<span class="mmf-adv-note" title="' . esc_attr( MMF_Advisor::reason_label( $css_reason ) ) . '">' . esc_html( MMF_Advisor::reason_label( $css_reason ) ) . '</span>';
+			echo '</div>';
+
+			echo '<div class="mmf-adv-size">' . esc_html( $size ) . '</div>';
+			echo '<div class="mmf-adv-verdict"><span class="mmf-verdict mmf-verdict--' . esc_attr( $verdict ) . '">' . esc_html( $css_label ) . '</span></div>';
+			echo '<div class="mmf-adv-actions">' . self::css_action_links( $item ) . '</div>';
+			echo '</div>';
 		}
 
-		echo '</tbody></table></div></section>';
+		echo '</div></section>';
 	}
 
 	/**
@@ -2860,6 +2879,20 @@ final class MMF_Admin {
 .mmf-wrap .mmf-progress[hidden]{display:none}
 .mmf-wrap .mmf-bulk__actions{display:flex;gap:var(--mmf-gap);flex-wrap:wrap;margin:12px 0 0}
 .mmf-wrap .mmf-rules{margin:0 0 0 18px}
+.mmf-wrap .mmf-adv-list{border:1px solid var(--mmf-border);border-radius:var(--mmf-radius);overflow:hidden;background:var(--mmf-bg)}
+.mmf-wrap .mmf-adv-row{display:grid;grid-template-columns:minmax(0,1fr) 96px 150px 210px;gap:12px;align-items:start;padding:8px 12px;border-top:1px solid var(--mmf-border)}
+.mmf-wrap .mmf-adv-row:first-child{border-top:0}
+.mmf-wrap .mmf-adv-row--head{background:var(--mmf-surface);font-size:12px;text-transform:uppercase;letter-spacing:.02em;color:var(--mmf-muted);font-weight:600}
+.mmf-wrap .mmf-adv-row:hover{background:var(--mmf-surface)}
+.mmf-wrap .mmf-adv-main{min-width:0}
+.mmf-wrap .mmf-adv-name{display:inline-block;max-width:100%;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+.mmf-wrap .mmf-adv-url{display:block;color:var(--mmf-muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mmf-wrap .mmf-adv-note{display:block;margin-top:2px;color:var(--mmf-muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mmf-wrap .mmf-adv-size{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mmf-wrap .mmf-adv-verdict{min-width:0}
+.mmf-wrap .mmf-adv-actions{display:flex;gap:6px;flex-wrap:nowrap;justify-content:flex-start}
+@media (max-width:1200px){.mmf-wrap .mmf-adv-row{grid-template-columns:minmax(0,1fr) 80px 130px 190px}}
+@media (max-width:900px){.mmf-wrap .mmf-adv-row{grid-template-columns:1fr;gap:4px}.mmf-wrap .mmf-adv-row--head{display:none}.mmf-wrap .mmf-adv-size{text-align:left}.mmf-wrap .mmf-adv-size::before{content:"Размер: ";color:var(--mmf-muted)}}
 .mmf-wrap .mmf-advisor__summary{font-weight:600}
 .mmf-wrap .mmf-advisor-filters{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
 .mmf-wrap .mmf-advisor-filters .button{font-size:12px;padding:2px 8px;min-height:26px}
@@ -3052,7 +3085,7 @@ if(help&&pop){
   window.addEventListener("resize",schedule);
 }
 var advisorFilters=document.querySelectorAll(".mmf-filter");
-var advisorRows=document.querySelectorAll(".mmf-advisor-table tbody tr[data-verdict]");
+var advisorRows=document.querySelectorAll(".mmf-adv-row[data-verdict],.mmf-advisor-table tbody tr[data-verdict]");
 var advisorSearch=document.querySelector(".mmf-advisor-search");
 function advisorApply(){var active=document.querySelector(".mmf-filter--active");var filter=active?active.getAttribute("data-filter"):"all";var term=advisorSearch?advisorSearch.value.toLowerCase():"";for(var i=0;i<advisorRows.length;i++){var row=advisorRows[i];var show=("all"===filter||row.getAttribute("data-verdict")===filter)&&(!term||-1!==(row.getAttribute("data-search")||"").indexOf(term));row.hidden=!show;}}
 for(var fi=0;fi<advisorFilters.length;fi++){advisorFilters[fi].addEventListener("click",function(){for(var j=0;j<advisorFilters.length;j++){advisorFilters[j].classList.remove("mmf-filter--active");}this.classList.add("mmf-filter--active");advisorApply();});}
