@@ -192,28 +192,35 @@ final class MMF_Avatars {
 		}
 
 		$quality = max( 60, min( 95, (int) MMF_Config::get( 'avatar_quality', 82 ) ) );
-		$hash    = MMF_Cache::hash( $file . '|' . (string) filemtime( $file ) . '|' . $quality, 'webp' );
-		$target  = MMF_Cache::path( $hash, 'webp' );
+		$sidecar = $file . '.webp';
 
-		if ( '' === $target ) {
-			return $url;
+		// The copy lives next to the avatar, not in the clearable cache: a cache
+		// reset must not turn a cached page's avatar into a 404.
+		if ( ! is_file( $sidecar ) ) {
+			$ok = class_exists( 'MMF_Images' ) && MMF_Images::convert_to( $file, $sidecar, $quality, 'png' === $ext );
+
+			if ( ! $ok || ! is_file( $sidecar ) ) {
+				self::$errors++;
+				MMF_Stats::increment( 'avatar_missing' );
+				self::$done[ $url ] = $url;
+
+				return $url;
+			}
 		}
 
-		if ( ! is_file( $target ) && ! self::convert( $file, $target, $quality, $ext ) ) {
-			self::$errors++;
+		$query = (string) wp_parse_url( $url, PHP_URL_QUERY );
+		$photo = preg_replace( '/(\?.*)?$/', '', $url );
+
+		if ( ! is_string( $photo ) ) {
 			self::$done[ $url ] = $url;
 
 			return $url;
 		}
 
-		$webp = MMF_Cache::url( $hash, 'webp' );
-
-		if ( '' === $webp ) {
-			return $url;
-		}
+		$webp = $photo . '.webp' . ( '' !== $query ? '?' . $query : '' );
 
 		self::$converted++;
-		self::$saved += max( 0, (int) filesize( $file ) - (int) filesize( $target ) );
+		self::$saved += max( 0, (int) filesize( $file ) - (int) filesize( $sidecar ) );
 		self::$done[ $url ] = $webp;
 
 		return $webp;

@@ -32,6 +32,9 @@ final class MMF_Images {
 
 	public const MIN_BYTES = 10240;
 
+	public const JOBS_OPTION = 'mmf_webp_jobs';
+	public const VIEW_LOCK = 'mmf_webp_view_lock';
+
 	/**
 	 * Detected converter, `null` until first use.
 	 */
@@ -73,6 +76,7 @@ final class MMF_Images {
 		add_filter( 'wp_generate_attachment_metadata', array( __CLASS__, 'on_metadata' ), 20, 2 );
 		add_action( 'delete_attachment', array( __CLASS__, 'on_delete' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'maybe_buffer' ), 2 );
+		add_action( 'shutdown', array( __CLASS__, 'process_queue' ) );
 		add_action( 'shutdown', array( __CLASS__, 'flush_stats' ) );
 	}
 
@@ -155,6 +159,110 @@ final class MMF_Images {
 	 */
 	public static function sidecar( string $file ): string {
 		return $file . '.webp';
+	}
+
+	/**
+	 * Absolute path of an attachment's original file.
+	 *
+	 * @param int $id Attachment ID.
+	 */
+	public static function attachment_file( int $id ): string {
+		$metadata = wp_get_attachment_metadata( $id );
+		$file     = is_array( $metadata ) && isset( $metadata['file'] ) ? (string) $metadata['file'] : '';
+
+		if ( '' === $file ) {
+			return '';
+		}
+
+		$uploads = wp_upload_dir( null, false );
+
+		if ( ! is_array( $uploads ) || ! empty( $uploads['error'] ) ) {
+			return '';
+		}
+
+		return trailingslashit( (string) $uploads['basedir'] ) . $file;
+	}
+
+	/**
+	 * Whether an attachment still needs a sidecar.
+	 *
+	 * @param int $id Attachment ID.
+	 */
+	public static function needs_sidecar( int $id ): bool {
+		$file = self::attachment_file( $id );
+
+		if ( '' === $file ) {
+			return false;
+		}
+
+		$type = strtolower( (string) pathinfo( $file, PATHINFO_EXTENSION ) );
+
+		if ( ! in_array( $type, array( 'jpg', 'jpeg', 'png' ), true ) ) {
+			return false;
+		}
+
+		return ! self::usable_sidecar( $file );
+	}
+
+	/**
+	 * Converts the original and the generated sizes of one attachment.
+	 *
+	 * @param int $id Attachment ID.
+	 * @return array<string,int> Counters by outcome.
+	 */
+	public static function convert_attachment( int $id ): array {
+		$out = array(
+			'created'      => 0,
+			'recreated'    => 0,
+			'reused'       => 0,
+			'already-webp' => 0,
+			'skipped'      => 0,
+			'small'        => 0,
+			'error'        => 0,
+			'bigger'       => 0,
+		);
+
+		$mime = function_exists( 'get_post_mime_type' ) ? strtolower( (string) get_post_mime_type( $id ) ) : '';
+
+		if ( 'image/webp' === $mime ) {
+			MMF_Stats::increment( 'image_webp_existing' );
+			$out['already-webp']++;
+
+			return $out;
+		}
+
+		$metadata = wp_get_attachment_metadata( $id );
+		$file     = is_array( $metadata ) && isset( $metadata['file'] ) ? (string) $metadata['file'] : '';
+
+		if ( '' === $file ) {
+			return $out;
+		}
+
+		$uploads = wp_upload_dir( null, false );
+
+		if ( ! is_array( $uploads ) || ! empty( $uploads['error'] ) ) {
+			return $out;
+		}
+
+		$base  = trailingslashit( (string) $uploads['basedir'] );
+		$dir   = trailingslashit( dirname( $file ) );
+		$paths = array( $base . $file );
+
+		foreach ( (array) ( $metadata['sizes'] ?? array() ) as $size ) {
+			if ( is_array( $size ) && isset( $size['file'] ) ) {
+				$paths[] = $base . $dir . (string) $size['file'];
+			}
+		}
+
+		foreach ( $paths as $path ) {
+			$result = self::convert_file( $path );
+
+			if ( isset( $out[ $result ] ) ) {
+				$out[ $result ]++;
+			}
+		}
+
+		return $out;
 	}
 
 	/**
@@ -272,7 +380,7 @@ final class MMF_Images {
 		if ( (int) filesize( $path ) < self::MIN_BYTES ) {
 			MMF_Stats::increment( 'image_small' );
 
-			return 'skipped';
+			return 'small';
 		}
 
 		$info = @getimagesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- a broken file is the expected failure.
@@ -330,11 +438,12 @@ final class MMF_Images {
 	 * @param string $target  Sidecar.
 	 * @param string $type    `jpg`, `jpeg` or `png`.
 	 */
-	private static function write_sidecar( string $path, string $target, string $type ): bool {
-		$quality = 'png' === $type ? (int) MMF_Config::get( 'image_quality_png', 82 ) : (int) MMF_Config::get( 'image_quality_jpeg', 82 );
-		$quality = max( 60, min( 95, $quality ) );
+	private static function write_sidecar( string $path, string $target, string $type, ?int $quality = null, ?bool $lossless = null ): bool {
+		$quality  = null === $quality ? ( 'png' === $type ? (int) MMF_Config::get( 'image_quality_png', 82 ) : (int) MMF_Config::get( 'image_quality_jpeg', 82 ) ) : $quality;
+		$quality  = max( 60, min( 95, $quality ) );
+		$lossless = null === $lossless ? ( 'png' === $type && (bool) MMF_Config::get( 'image_png_lossless', true ) ) : $lossless;
 
-		if ( 'png' === $type && (bool) MMF_Config::get( 'image_png_lossless', true ) ) {
+		if ( $lossless ) {
 			$quality = 100;
 		}
 
@@ -466,6 +575,92 @@ final class MMF_Images {
 		self::$served  = 0;
 		self::$saved   = 0;
 		self::$counted = array();
+	}
+
+	/**
+	 * Converts one file to an explicit sidecar with a given quality.
+	 *
+	 * Used by the avatar converter, which has its own quality setting and must
+	 * write next to the avatar instead of the clearable cache.
+	 *
+	 * @param string $file     Source.
+	 * @param string $target   Target path.
+	 * @param int    $quality  60-95.
+	 * @param bool   $lossless PNG lossless mode.
+	 */
+	public static function convert_to( string $file, string $target, int $quality, bool $lossless ): bool {
+		if ( '' === self::method() || ! is_file( $file ) ) {
+			return false;
+		}
+
+		$type = strtolower( (string) pathinfo( $file, PATHINFO_EXTENSION ) );
+
+		if ( ! in_array( $type, array( 'jpg', 'jpeg', 'png' ), true ) ) {
+			return false;
+		}
+
+		return self::write_sidecar( $file, $target, $type, $quality, $lossless );
+	}
+
+	/**
+	 * Queues a file for conversion on shutdown, once.
+	 *
+	 * @param string $file Original path.
+	 */
+	public static function enqueue( string $file ): void {
+		if ( ! (bool) MMF_Config::get( 'image_webp_ondemand', false ) || ! is_file( $file ) ) {
+			return;
+		}
+
+		$jobs = get_option( self::JOBS_OPTION, array() );
+		$jobs = is_array( $jobs ) ? $jobs : array();
+
+		if ( in_array( $file, $jobs, true ) ) {
+			return;
+		}
+
+		$jobs[] = $file;
+		update_option( self::JOBS_OPTION, array_values( array_unique( $jobs ) ), false );
+		MMF_Stats::increment( 'convert_queued' );
+	}
+
+	/**
+	 * Converts at most two queued files after the response, under a lock.
+	 */
+	public static function process_queue(): void {
+		if ( is_admin() || ! (bool) MMF_Config::get( 'image_webp_ondemand', false ) ) {
+			return;
+		}
+
+		$lock = (int) get_option( self::VIEW_LOCK, 0 );
+
+		if ( $lock > 0 && ( time() - $lock ) < 60 ) {
+			return;
+		}
+
+		$jobs = get_option( self::JOBS_OPTION, array() );
+
+		if ( ! is_array( $jobs ) || array() === $jobs ) {
+			return;
+		}
+
+		update_option( self::VIEW_LOCK, time(), false );
+
+		$chunk = array_splice( $jobs, 0, 2 );
+
+		foreach ( $chunk as $file ) {
+			if ( is_string( $file ) && is_file( $file ) && ! self::usable_sidecar( $file ) ) {
+				self::convert_file( $file );
+			}
+		}
+
+		if ( array() === $jobs ) {
+			delete_option( self::JOBS_OPTION );
+		} else {
+			update_option( self::JOBS_OPTION, array_values( $jobs ), false );
+		}
+
+		delete_option( self::VIEW_LOCK );
 	}
 
 	/**
@@ -651,6 +846,12 @@ final class MMF_Images {
 		$file = MMF_Assets::resolve_path( $url, $ext );
 
 		if ( '' === $file || ! self::usable_sidecar( $file ) ) {
+			if ( '' !== $file && (bool) MMF_Config::get( 'image_webp_ondemand', false ) ) {
+				self::enqueue( $file );
+			} elseif ( '' !== $file ) {
+				MMF_Stats::increment( 'image_missing' );
+			}
+
 			return $url;
 		}
 

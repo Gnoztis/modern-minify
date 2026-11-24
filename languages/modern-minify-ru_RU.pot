@@ -9,9 +9,9 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Modern Minify 0.7.1\n"
+"Project-Id-Version: Modern Minify 0.7.4\n"
 "Report-Msgid-Bugs-To: https://github.com/Gnoztis/modern-minify/issues\n"
-"POT-Creation-Date: 2026-11-24T12:59:20+00:00\n"
+"POT-Creation-Date: 2026-11-24T13:16:25+00:00\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -19,7 +19,7 @@ msgstr ""
 "X-Domain: modern-minify\n"
 
 #. translators: plugin header field 'Name'
-#: modern-minify.php:3 includes/class-mmf-admin-bar.php:51 includes/class-mmf-admin.php:252 includes/class-mmf-admin.php:253
+#: modern-minify.php:3 includes/class-mmf-admin-bar.php:51 includes/class-mmf-admin.php:263 includes/class-mmf-admin.php:264
 msgid "Modern Minify"
 msgstr ""
 
@@ -28,7 +28,7 @@ msgstr ""
 msgid "Минификация CSS, JS и HTML, асинхронная загрузка файлов и обработка Google Fonts."
 msgstr ""
 
-#: includes/class-mmf-admin-bar.php:60 includes/class-mmf-admin.php:411
+#: includes/class-mmf-admin-bar.php:60 includes/class-mmf-admin.php:434
 msgid "Настройки"
 msgstr ""
 
@@ -56,1245 +56,1385 @@ msgstr ""
 msgid "Страница видна так только администратору"
 msgstr ""
 
-#: includes/class-mmf-admin.php:112
+#: includes/class-mmf-admin.php:123
 msgid "Минификация HTML, CSS и JS — включить"
 msgstr ""
 
-#: includes/class-mmf-admin.php:113
+#: includes/class-mmf-admin.php:124
 msgid "Минификация инлайн-блоков — включить"
 msgstr ""
 
-#: includes/class-mmf-admin.php:114
+#: includes/class-mmf-admin.php:125
 msgid "Google Fonts — скачивать локально"
 msgstr ""
 
-#: includes/class-mmf-admin.php:115
+#: includes/class-mmf-admin.php:126
 msgid "Font Awesome — встроить CSS"
 msgstr ""
 
-#: includes/class-mmf-admin.php:116
+#: includes/class-mmf-admin.php:127
 msgid "Граватары — заменить локальной заглушкой"
 msgstr ""
 
-#: includes/class-mmf-admin.php:117
+#: includes/class-mmf-admin.php:128
 msgid "Версии файлов — хеш содержимого"
 msgstr ""
 
-#: includes/class-mmf-admin.php:118
+#: includes/class-mmf-admin.php:129
 msgid "Emoji — удалять"
 msgstr ""
 
-#: includes/class-mmf-admin.php:119
+#: includes/class-mmf-admin.php:130
 msgid "Внешние файлы — локально"
 msgstr ""
 
-#: includes/class-mmf-admin.php:120
+#: includes/class-mmf-admin.php:131
 msgid "Объединение CSS — включить (CSS блокирует отрисовку)"
 msgstr ""
 
-#: includes/class-mmf-admin.php:121
+#: includes/class-mmf-admin.php:132
 msgid "Объединение JS — выключить (на HTTP/2 чаще вредит)"
 msgstr ""
 
-#: includes/class-mmf-admin.php:122
+#: includes/class-mmf-admin.php:133
 msgid "Delay JS — выключить (список шаблонов будет очищен)"
 msgstr ""
 
-#: includes/class-mmf-admin.php:123
+#: includes/class-mmf-admin.php:134
 msgid "Rocket-режим — выключить"
 msgstr ""
 
-#: includes/class-mmf-admin.php:124
+#: includes/class-mmf-admin.php:135
 msgid "defer для локальных скриптов — выключить"
 msgstr ""
 
-#: includes/class-mmf-admin.php:125
+#: includes/class-mmf-admin.php:136
 msgid "defer для внешних — выключить"
 msgstr ""
 
-#: includes/class-mmf-admin.php:165 includes/class-mmf-admin.php:1464
+#: includes/class-mmf-admin.php:176 includes/class-mmf-admin.php:1466
 msgid "Настройки уже соответствуют рекомендуемым."
 msgstr ""
 
-#: includes/class-mmf-admin.php:185 includes/class-mmf-admin.php:1461
+#: includes/class-mmf-admin.php:196 includes/class-mmf-admin.php:1463
 msgid "Рекомендуемые настройки применены, кеш сброшен (удалено файлов: %d)."
 msgstr ""
 
-#: includes/class-mmf-admin.php:225 includes/class-mmf-admin.php:1463
+#: includes/class-mmf-admin.php:236 includes/class-mmf-admin.php:1465
 msgid "Тестовый режим выключен."
 msgstr ""
 
-#: includes/class-mmf-admin.php:226 includes/class-mmf-admin.php:1462
+#: includes/class-mmf-admin.php:237 includes/class-mmf-admin.php:1464
 msgid "Тестовый режим включён."
 msgstr ""
 
-#: includes/class-mmf-admin.php:312 includes/class-mmf-admin.php:1460
+#: includes/class-mmf-admin.php:323 includes/class-mmf-admin.php:1462
 msgid "Кеш очищен и статистика сброшена (удалено файлов: %d)."
 msgstr ""
 
-#: includes/class-mmf-admin.php:333
+#: includes/class-mmf-admin.php:344
 msgid "Недостаточно прав для этой страницы."
 msgstr ""
 
-#: includes/class-mmf-admin.php:406
+#: includes/class-mmf-admin.php:401
+msgid "Открыть «Советник»"
+msgstr ""
+
+#: includes/class-mmf-admin.php:427
 msgid "Статус"
 msgstr ""
 
-#: includes/class-mmf-admin.php:407 includes/class-mmf-admin.php:1189
+#: includes/class-mmf-admin.php:428 includes/class-mmf-admin.php:1190
 msgid "JavaScript"
 msgstr ""
 
-#: includes/class-mmf-admin.php:408 includes/class-mmf-admin.php:1188
+#: includes/class-mmf-admin.php:429 includes/class-mmf-admin.php:1189
 msgid "CSS"
 msgstr ""
 
-#: includes/class-mmf-admin.php:409
+#: includes/class-mmf-admin.php:430
 msgid "Шрифты"
 msgstr ""
 
-#: includes/class-mmf-admin.php:410 includes/class-mmf-admin.php:588 includes/class-mmf-admin.php:849 includes/class-mmf-admin.php:1196
+#: includes/class-mmf-admin.php:431
+msgid "Советник"
+msgstr ""
+
+#: includes/class-mmf-admin.php:432
+msgid "Изображения"
+msgstr ""
+
+#: includes/class-mmf-admin.php:433 includes/class-mmf-admin.php:613 includes/class-mmf-admin.php:878 includes/class-mmf-admin.php:1197
 msgid "Внешние файлы"
 msgstr ""
 
-#: includes/class-mmf-admin.php:412
+#: includes/class-mmf-admin.php:435
 msgid "Дополнительно"
 msgstr ""
 
-#: includes/class-mmf-admin.php:444
+#: includes/class-mmf-admin.php:469
 msgid "Минифицировать JavaScript"
 msgstr ""
 
-#: includes/class-mmf-admin.php:445 includes/class-mmf-admin.php:509
+#: includes/class-mmf-admin.php:470 includes/class-mmf-admin.php:534
 msgid "Локальные файлы сжимаются в кеш, адрес в теге заменяется."
 msgstr ""
 
-#: includes/class-mmf-admin.php:448
+#: includes/class-mmf-admin.php:473
 msgid "Объединять JS-файлы"
 msgstr ""
 
-#: includes/class-mmf-admin.php:449
+#: includes/class-mmf-admin.php:474
 msgid "Только рядом стоящие локальные файлы без async/defer/module; при ошибке теги остаются как были. На HTTP/2 объединение JS чаще вредит: скрипты и так не блокируют отрисовку, а один большой файл откладывает выполнение. Включайте по замеру."
 msgstr ""
 
-#: includes/class-mmf-admin.php:452
+#: includes/class-mmf-admin.php:477
 msgid "Шаблоны для async"
 msgstr ""
 
-#: includes/class-mmf-admin.php:453
+#: includes/class-mmf-admin.php:478
 msgid "По одному шаблону на строку. Символ * означает любое количество символов."
 msgstr ""
 
-#: includes/class-mmf-admin.php:456
+#: includes/class-mmf-admin.php:481
 msgid "Откладывать все скрипты (если хоть один исключён — не откладывается ничего)"
 msgstr ""
 
-#: includes/class-mmf-admin.php:457
+#: includes/class-mmf-admin.php:482
 msgid "Режим «всё или ничего»: если хотя бы один внешний скрипт остаётся обычным (исключение, async, module, внешний домен), defer не применяется ни к кому. Причина видна на «Статусе»."
 msgstr ""
 
-#: includes/class-mmf-admin.php:460
+#: includes/class-mmf-admin.php:485
 msgid "Убирать jQuery Migrate"
 msgstr ""
 
-#: includes/class-mmf-admin.php:461
+#: includes/class-mmf-admin.php:486
 msgid "jQuery Migrate не нужен современным темам; включите, если появились предупреждения от старого кода. Админка не затрагивается."
 msgstr ""
 
-#: includes/class-mmf-admin.php:464 includes/class-mmf-admin.php:480
+#: includes/class-mmf-admin.php:489 includes/class-mmf-admin.php:505
 msgid "Не откладывать"
 msgstr ""
 
-#: includes/class-mmf-admin.php:465
+#: includes/class-mmf-admin.php:490
 msgid "Эти файлы минифицируются, но остаются в потоке страницы."
 msgstr ""
 
-#: includes/class-mmf-admin.php:468
+#: includes/class-mmf-admin.php:493
 msgid "Исключения JavaScript"
 msgstr ""
 
-#: includes/class-mmf-admin.php:469
+#: includes/class-mmf-admin.php:494
 msgid "Эти файлы не обрабатываются вовсе: ни минификации, ни async/defer."
 msgstr ""
 
-#: includes/class-mmf-admin.php:472
+#: includes/class-mmf-admin.php:497
 msgid "Перенести скрипты в подвал"
 msgstr ""
 
-#: includes/class-mmf-admin.php:473
+#: includes/class-mmf-admin.php:498
 msgid "Локальные скрипты из head переезжают в конец body с сохранением порядка."
 msgstr ""
 
-#: includes/class-mmf-admin.php:476
+#: includes/class-mmf-admin.php:501
 msgid "Откладывать загрузку (Delay JS)"
 msgstr ""
 
-#: includes/class-mmf-admin.php:477
+#: includes/class-mmf-admin.php:502
 msgid "Файлы, чьи URL совпали с шаблонами, не загружаются и не исполняются до первого взаимодействия посетителя. Пустой список — ничего не откладывается."
 msgstr ""
 
-#: includes/class-mmf-admin.php:481
+#: includes/class-mmf-admin.php:506
 msgid "Исключения для Delay JS. jQuery, wp-i18n и wp-hooks не откладываются никогда, даже если попали под шаблон."
 msgstr ""
 
-#: includes/class-mmf-admin.php:484
+#: includes/class-mmf-admin.php:509
 msgid "Страховочный таймаут, секунды"
 msgstr ""
 
-#: includes/class-mmf-admin.php:485
+#: includes/class-mmf-admin.php:510
 msgid "Если посетитель ничего не делает, отложенные скрипты загрузятся сами через столько секунд после готовности страницы."
 msgstr ""
 
-#: includes/class-mmf-admin.php:488
+#: includes/class-mmf-admin.php:513
 msgid "Rocket-режим: отложить весь JavaScript"
 msgstr ""
 
-#: includes/class-mmf-admin.php:489
+#: includes/class-mmf-admin.php:514
 msgid "Все скрипты, включая инлайн, выполняются после разбора страницы в исходном порядке. Если что-то сломалось — добавьте файл в исключения или выключите режим; для проверки используйте тестовый режим."
 msgstr ""
 
-#: includes/class-mmf-admin.php:492
+#: includes/class-mmf-admin.php:517
 msgid "Исключения Rocket-режима"
 msgstr ""
 
-#: includes/class-mmf-admin.php:493
+#: includes/class-mmf-admin.php:518
 msgid "Пути файлов и id инлайн-скриптов через строку; поддерживается *. Скрипты с data-mmf-defer=\"false\", module и сам загрузчик не трогаются никогда."
 msgstr ""
 
-#: includes/class-mmf-admin.php:496
+#: includes/class-mmf-admin.php:521
 msgid "defer для внешних скриптов"
 msgstr ""
 
-#: includes/class-mmf-admin.php:497
+#: includes/class-mmf-admin.php:522
 msgid "Внешний файл получает defer (но не async). Чужой код может зависеть от порядка загрузки — включайте осознанно и проверяйте страницу."
 msgstr ""
 
-#: includes/class-mmf-admin.php:500
+#: includes/class-mmf-admin.php:525
 msgid "Объединение: максимум файлов в пакете"
 msgstr ""
 
-#: includes/class-mmf-admin.php:501
+#: includes/class-mmf-admin.php:526
 msgid "Если рядом стоящих файлов больше, пакет не собирается и теги остаются как были."
 msgstr ""
 
-#: includes/class-mmf-admin.php:504
+#: includes/class-mmf-admin.php:529
 msgid "Объединение: максимум размера пакета, МиБ"
 msgstr ""
 
-#: includes/class-mmf-admin.php:505
+#: includes/class-mmf-admin.php:530
 msgid "Суммарный размер после минификации. Превышение — пакет не собирается."
 msgstr ""
 
-#: includes/class-mmf-admin.php:508
+#: includes/class-mmf-admin.php:533
 msgid "Минифицировать CSS"
 msgstr ""
 
-#: includes/class-mmf-admin.php:512
+#: includes/class-mmf-admin.php:537
 msgid "Объединять CSS-файлы"
 msgstr ""
 
-#: includes/class-mmf-admin.php:513
+#: includes/class-mmf-admin.php:538
 msgid "CSS блокирует первую отрисовку: файлы всё равно ждут друг друга в критической цепочке, поэтому объединение помогает и на HTTP/2. Только рядом стоящие локальные файлы с одинаковым media; print и speech не объединяются."
 msgstr ""
 
-#: includes/class-mmf-admin.php:516
+#: includes/class-mmf-admin.php:541
 msgid "Встраивать небольшие CSS"
 msgstr ""
 
-#: includes/class-mmf-admin.php:517
+#: includes/class-mmf-admin.php:542
 msgid "Файл меньше порога заменяется на style прямо в странице."
 msgstr ""
 
-#: includes/class-mmf-admin.php:520
+#: includes/class-mmf-admin.php:545
 msgid "Порог встраивания, КиБ"
 msgstr ""
 
-#: includes/class-mmf-admin.php:521
+#: includes/class-mmf-admin.php:546
 msgid "0 отключает встраивание, даже если переключатель включён."
 msgstr ""
 
-#: includes/class-mmf-admin.php:524
+#: includes/class-mmf-admin.php:549
 msgid "Удалять print-стили"
 msgstr ""
 
-#: includes/class-mmf-admin.php:525
+#: includes/class-mmf-admin.php:550
 msgid "Убирает ссылки со media=\"print\"."
 msgstr ""
 
-#: includes/class-mmf-admin.php:528
+#: includes/class-mmf-admin.php:553
 msgid "Исключения CSS"
 msgstr ""
 
-#: includes/class-mmf-admin.php:529
+#: includes/class-mmf-admin.php:554
 msgid "Эти файлы не обрабатываются вовсе."
 msgstr ""
 
-#: includes/class-mmf-admin.php:532
+#: includes/class-mmf-admin.php:557
 msgid "Google Fonts"
 msgstr ""
 
-#: includes/class-mmf-admin.php:533
+#: includes/class-mmf-admin.php:558
 msgid "Локальное размещение скачивает CSS и файлы шрифтов в кеш; при ошибке ссылка остаётся исходной."
 msgstr ""
 
-#: includes/class-mmf-admin.php:536
+#: includes/class-mmf-admin.php:561
 msgid "Font Awesome"
 msgstr ""
 
-#: includes/class-mmf-admin.php:537
+#: includes/class-mmf-admin.php:562
 msgid "Встроить CSS в страницу; адреса шрифтов остаются абсолютными."
 msgstr ""
 
-#: includes/class-mmf-admin.php:540 includes/class-mmf-admin.php:1199
+#: includes/class-mmf-admin.php:565 includes/class-mmf-admin.php:1200
 msgid "CSS шрифтов инлайном"
 msgstr ""
 
-#: includes/class-mmf-admin.php:541
+#: includes/class-mmf-admin.php:566
 msgid "Локализованный CSS Google Fonts печатается в <style>, а не отдельным файлом. Больше 50 КБ — остаётся файлом, чтобы не раздувать HTML."
 msgstr ""
 
-#: includes/class-mmf-admin.php:544
+#: includes/class-mmf-admin.php:569
 msgid "Минифицировать HTML"
 msgstr ""
 
-#: includes/class-mmf-admin.php:545
+#: includes/class-mmf-admin.php:570
 msgid "Убирает комментарии и пробелы между блоками; защищённые блоки не трогает."
 msgstr ""
 
-#: includes/class-mmf-admin.php:548
+#: includes/class-mmf-admin.php:573
 msgid "Минифицировать инлайн-блоки"
 msgstr ""
 
-#: includes/class-mmf-admin.php:549
+#: includes/class-mmf-admin.php:574
 msgid "Содержимое script и style прямо в странице. Отключается отдельно: ломается чаще всего именно оно."
 msgstr ""
 
-#: includes/class-mmf-admin.php:552
+#: includes/class-mmf-admin.php:577
 msgid "Не оптимизировать авторизованных"
 msgstr ""
 
-#: includes/class-mmf-admin.php:553
+#: includes/class-mmf-admin.php:578
 msgid "Страницы пользователей, которые вошли на сайт, остаются исходными."
 msgstr ""
 
-#: includes/class-mmf-admin.php:556
+#: includes/class-mmf-admin.php:581
 msgid "Убирать версию WordPress из head и фида"
 msgstr ""
 
-#: includes/class-mmf-admin.php:557
+#: includes/class-mmf-admin.php:582
 msgid "Удаляет meta name=\"generator\" и generator-тег RSS: версия в исходном коде подсказывает, какие уязвимости применимы."
 msgstr ""
 
-#: includes/class-mmf-admin.php:560
+#: includes/class-mmf-admin.php:585
 msgid "Убирать emoji-скрипты"
 msgstr ""
 
-#: includes/class-mmf-admin.php:561
+#: includes/class-mmf-admin.php:586
 msgid "Снимает скрипт и стили emoji ядра на страницах сайта; админка не затрагивается."
 msgstr ""
 
-#: includes/class-mmf-admin.php:564
+#: includes/class-mmf-admin.php:589
 msgid "Параметр ver в URL своих файлов"
 msgstr ""
 
-#: includes/class-mmf-admin.php:565
+#: includes/class-mmf-admin.php:590
 msgid "Хеш не раскрывает версию и сбрасывает кеш при изменении файла; удаление экономит запрос, но после обновления браузер может держать старый файл до конца кеша. У внешних файлов параметр всегда удаляется."
 msgstr ""
 
-#: includes/class-mmf-admin.php:568
+#: includes/class-mmf-admin.php:593
 msgid "Срок жизни кеша, дней"
 msgstr ""
 
-#: includes/class-mmf-admin.php:569
+#: includes/class-mmf-admin.php:594
 msgid "0 — не удалять по возрасту; пределы количества и размера ниже действуют. Файлы моложе часа не удаляются никогда."
 msgstr ""
 
-#: includes/class-mmf-admin.php:572
+#: includes/class-mmf-admin.php:597
 msgid "Предел файлов в кеше"
 msgstr ""
 
-#: includes/class-mmf-admin.php:573
+#: includes/class-mmf-admin.php:598
 msgid "Когда файлов больше, удаляются самые старые; файлы моложе часа не трогаются."
 msgstr ""
 
-#: includes/class-mmf-admin.php:576
+#: includes/class-mmf-admin.php:601
 msgid "Предел размера кеша, МБ"
 msgstr ""
 
-#: includes/class-mmf-admin.php:577
+#: includes/class-mmf-admin.php:602
 msgid "Когда кеш больше, удаляются самые старые файлы; файлы моложе часа не трогаются."
 msgstr ""
 
-#: includes/class-mmf-admin.php:580 includes/class-mmf-admin.php:1213
+#: includes/class-mmf-admin.php:605 includes/class-mmf-admin.php:1215
 msgid "Тестовый режим"
 msgstr ""
 
-#: includes/class-mmf-admin.php:581
+#: includes/class-mmf-admin.php:606
 msgid "Оптимизация только для администраторов: посетители видят исходную страницу."
 msgstr ""
 
-#: includes/class-mmf-admin.php:584
+#: includes/class-mmf-admin.php:609
 msgid "Режим отладки"
 msgstr ""
 
-#: includes/class-mmf-admin.php:585
+#: includes/class-mmf-admin.php:610
 msgid "Подробности на этом экране; записей в лог нет."
 msgstr ""
 
-#: includes/class-mmf-admin.php:589
+#: includes/class-mmf-admin.php:614
 msgid "Локально — скачать в кеш и отдавать со своего домена; не трогать; удалить теги (по умолчанию выключено, потому что ломает функциональность)."
 msgstr ""
 
-#: includes/class-mmf-admin.php:592
+#: includes/class-mmf-admin.php:617
 msgid "Не загружать граватары (локальная заглушка)"
 msgstr ""
 
-#: includes/class-mmf-admin.php:593
+#: includes/class-mmf-admin.php:618
 msgid "Граватары заменяются локальной заглушкой; аватары, заданные другим плагином (загруженный файл, uploads, data URI, свой домен), не затрагиваются. Админка и письма не меняются."
 msgstr ""
 
-#: includes/class-mmf-admin.php:596
+#: includes/class-mmf-admin.php:621
 msgid "Отдавать локальные аватары в WebP"
 msgstr ""
 
-#: includes/class-mmf-admin.php:597
+#: includes/class-mmf-admin.php:622
 msgid "Только загруженные JPEG и PNG на своём домене и только когда браузер принимает WebP; исходный файл не меняется, копия живёт в кеше. GIF и SVG не трогаются."
 msgstr ""
 
-#: includes/class-mmf-admin.php:600
+#: includes/class-mmf-admin.php:625
 msgid "Качество WebP для аватаров"
 msgstr ""
 
-#: includes/class-mmf-admin.php:601
+#: includes/class-mmf-admin.php:626
 msgid "От 60 до 95; меньше — легче файл. Действует на новые копии."
 msgstr ""
 
-#: includes/class-mmf-admin.php:604
+#: includes/class-mmf-admin.php:629
 msgid "Создавать WebP для загруженных картинок"
 msgstr ""
 
-#: includes/class-mmf-admin.php:605
+#: includes/class-mmf-admin.php:630
 msgid "Рядом с JPEG/PNG появляется файл .webp; оригинал не меняется и не удаляется. Отдаётся только браузерам с Accept: image/webp."
 msgstr ""
 
-#: includes/class-mmf-admin.php:608
+#: includes/class-mmf-admin.php:633
+msgid "Конвертировать при первом просмотре"
+msgstr ""
+
+#: includes/class-mmf-admin.php:634
+msgid "Если свежей копии нет, файл ставится в очередь и конвертируется после ответа (1–2 за запрос, под замком). Посетитель ждёт оригинал, библиотека наполняется сама. Выключено по умолчанию."
+msgstr ""
+
+#: includes/class-mmf-admin.php:637
 msgid "Качество WebP для JPEG"
 msgstr ""
 
-#: includes/class-mmf-admin.php:609
+#: includes/class-mmf-admin.php:638
 msgid "60–95, по умолчанию 82. Действует на новые файлы."
 msgstr ""
 
-#: includes/class-mmf-admin.php:612
+#: includes/class-mmf-admin.php:641
 msgid "Качество WebP для PNG (без lossless)"
 msgstr ""
 
-#: includes/class-mmf-admin.php:613
+#: includes/class-mmf-admin.php:642
 msgid "60–95, по умолчанию 82; не используется, пока включён lossless."
 msgstr ""
 
-#: includes/class-mmf-admin.php:616
+#: includes/class-mmf-admin.php:645
 msgid "PNG в WebP без потерь"
 msgstr ""
 
-#: includes/class-mmf-admin.php:617
+#: includes/class-mmf-admin.php:646
 msgid "По умолчанию включено: прозрачность и пиксели сохраняются, файл может быть больше JPEG-варианта."
 msgstr ""
 
-#: includes/class-mmf-admin.php:620
+#: includes/class-mmf-admin.php:649
 msgid "Предел размера внешнего файла, МиБ"
 msgstr ""
 
-#: includes/class-mmf-admin.php:621
+#: includes/class-mmf-admin.php:650
 msgid "Файл больше предела не скачивается: тег остаётся исходным."
 msgstr ""
 
-#: includes/class-mmf-admin.php:624
+#: includes/class-mmf-admin.php:653
 msgid "Оставить внешними"
 msgstr ""
 
-#: includes/class-mmf-admin.php:625
+#: includes/class-mmf-admin.php:654
 msgid "Дополнительные хосты или части URL через строку. Встроенный список API-скриптов показан ниже."
 msgstr ""
 
-#: includes/class-mmf-admin.php:638
+#: includes/class-mmf-admin.php:667
 msgid "Не обрабатывать"
 msgstr ""
 
-#: includes/class-mmf-admin.php:639
+#: includes/class-mmf-admin.php:668
 msgid "Добавить display=swap"
 msgstr ""
 
-#: includes/class-mmf-admin.php:640
+#: includes/class-mmf-admin.php:669
 msgid "Скачать и отдать локально"
 msgstr ""
 
-#: includes/class-mmf-admin.php:643
+#: includes/class-mmf-admin.php:672
 msgid "Оставить как есть"
 msgstr ""
 
-#: includes/class-mmf-admin.php:644
+#: includes/class-mmf-admin.php:673
 msgid "Встроить CSS в страницу"
 msgstr ""
 
-#: includes/class-mmf-admin.php:647
+#: includes/class-mmf-admin.php:676
 msgid "Заменить на хеш содержимого"
 msgstr ""
 
-#: includes/class-mmf-admin.php:648
+#: includes/class-mmf-admin.php:677
 msgid "Удалить параметр"
 msgstr ""
 
-#: includes/class-mmf-admin.php:649 includes/class-mmf-admin.php:653
+#: includes/class-mmf-admin.php:678 includes/class-mmf-admin.php:682
 msgid "Не трогать"
 msgstr ""
 
-#: includes/class-mmf-admin.php:652
+#: includes/class-mmf-admin.php:681
 msgid "Скачать и отдавать со своего домена"
 msgstr ""
 
-#: includes/class-mmf-admin.php:654
+#: includes/class-mmf-admin.php:683
 msgid "Удалить теги (ломает функциональность)"
 msgstr ""
 
-#: includes/class-mmf-admin.php:757
+#: includes/class-mmf-admin.php:786
 msgid "На этом сервере нет WebP (GD или Imagick), поэтому настройка недоступна и ничего не меняет."
 msgstr ""
 
-#: includes/class-mmf-admin.php:767
+#: includes/class-mmf-admin.php:796
 msgid "JS на HTTP/2 обычно не объединяем: один большой файл задерживает исполнение"
 msgstr ""
 
-#: includes/class-mmf-admin.php:768
+#: includes/class-mmf-admin.php:797
 msgid "CSS блокирует отрисовку, поэтому объединение сокращает критический путь"
 msgstr ""
 
-#: includes/class-mmf-admin.php:786
+#: includes/class-mmf-admin.php:815
 msgid "Состояние"
 msgstr ""
 
-#: includes/class-mmf-admin.php:787
+#: includes/class-mmf-admin.php:816
 msgid "плагин активен"
 msgstr ""
 
-#: includes/class-mmf-admin.php:795
+#: includes/class-mmf-admin.php:824
 msgid "Страницы и файлы"
 msgstr ""
 
-#: includes/class-mmf-admin.php:797
+#: includes/class-mmf-admin.php:826
 msgid "Страниц обработано"
 msgstr ""
 
-#: includes/class-mmf-admin.php:798
+#: includes/class-mmf-admin.php:827
 msgid "Файлов минифицировано"
 msgstr ""
 
-#: includes/class-mmf-admin.php:799
+#: includes/class-mmf-admin.php:828
 msgid "Инлайн-блоков сжато"
 msgstr ""
 
-#: includes/class-mmf-admin.php:800
+#: includes/class-mmf-admin.php:829
 msgid "Ошибок обработки"
 msgstr ""
 
-#: includes/class-mmf-admin.php:805
+#: includes/class-mmf-admin.php:834
 msgid "Отложенная загрузка"
 msgstr ""
 
-#: includes/class-mmf-admin.php:807
+#: includes/class-mmf-admin.php:836
 msgid "Скриптов defer"
 msgstr ""
 
-#: includes/class-mmf-admin.php:808
+#: includes/class-mmf-admin.php:837
 msgid "defer на странице"
 msgstr ""
 
-#: includes/class-mmf-admin.php:809 includes/class-mmf-assets.php:858
+#: includes/class-mmf-admin.php:838 includes/class-mmf-assets.php:858
 msgid "применён"
 msgstr ""
 
-#: includes/class-mmf-admin.php:810
+#: includes/class-mmf-admin.php:839
 msgid "не применён"
 msgstr ""
 
-#: includes/class-mmf-admin.php:811
+#: includes/class-mmf-admin.php:840
 msgid "Скриптов async"
 msgstr ""
 
-#: includes/class-mmf-admin.php:812
+#: includes/class-mmf-admin.php:841
 msgid "Перенесено в подвал"
 msgstr ""
 
-#: includes/class-mmf-admin.php:813
+#: includes/class-mmf-admin.php:842
 msgid "Delay JS, всего"
 msgstr ""
 
-#: includes/class-mmf-admin.php:814
+#: includes/class-mmf-admin.php:843
 msgid "Delay JS на последней странице"
 msgstr ""
 
-#: includes/class-mmf-admin.php:815
+#: includes/class-mmf-admin.php:844
 msgid "Rocket-режимом"
 msgstr ""
 
-#: includes/class-mmf-admin.php:820
+#: includes/class-mmf-admin.php:849
 msgid "Пакеты"
 msgstr ""
 
-#: includes/class-mmf-admin.php:822
+#: includes/class-mmf-admin.php:851
 msgid "Пакетов собрано"
 msgstr ""
 
-#: includes/class-mmf-admin.php:823
+#: includes/class-mmf-admin.php:852
 msgid "CSS-файлов: было → стало"
 msgstr ""
 
-#: includes/class-mmf-admin.php:824
+#: includes/class-mmf-admin.php:853
 msgid "Файлов в пакетах"
 msgstr ""
 
-#: includes/class-mmf-admin.php:825
+#: includes/class-mmf-admin.php:854
 msgid "Инлайн-стилей в пакетах"
 msgstr ""
 
-#: includes/class-mmf-admin.php:826
+#: includes/class-mmf-admin.php:855
 msgid "Запросов сэкономлено"
 msgstr ""
 
-#: includes/class-mmf-admin.php:827
+#: includes/class-mmf-admin.php:856
 msgid "Размер пакетов, КБ"
 msgstr ""
 
-#: includes/class-mmf-admin.php:835
+#: includes/class-mmf-admin.php:864
 msgid "инлайн-стиль с id"
 msgstr ""
 
-#: includes/class-mmf-admin.php:836
+#: includes/class-mmf-admin.php:865
 msgid "инлайн-стиль с @import"
 msgstr ""
 
-#: includes/class-mmf-admin.php:837
+#: includes/class-mmf-admin.php:866
 msgid "превышен размер пакета"
 msgstr ""
 
-#: includes/class-mmf-admin.php:845
+#: includes/class-mmf-admin.php:874
 msgid "Не объединено: %s."
 msgstr ""
 
-#: includes/class-mmf-admin.php:851
+#: includes/class-mmf-admin.php:880
 msgid "Локализовано"
 msgstr ""
 
-#: includes/class-mmf-admin.php:852
+#: includes/class-mmf-admin.php:881
 msgid "Оставлено внешними"
 msgstr ""
 
-#: includes/class-mmf-admin.php:853
+#: includes/class-mmf-admin.php:882
 msgid "Не удалось скачать"
 msgstr ""
 
-#: includes/class-mmf-admin.php:854
+#: includes/class-mmf-admin.php:883
 msgid "Тегов удалено"
 msgstr ""
 
-#: includes/class-mmf-admin.php:855
+#: includes/class-mmf-admin.php:884
 msgid "Предупреждений о шрифтах"
 msgstr ""
 
-#: includes/class-mmf-admin.php:856
+#: includes/class-mmf-admin.php:885
 msgid "CSS шрифтов отдано файлом"
 msgstr ""
 
-#: includes/class-mmf-admin.php:857
+#: includes/class-mmf-admin.php:886
 msgid "Аватаров заменено"
 msgstr ""
 
-#: includes/class-mmf-admin.php:858
+#: includes/class-mmf-admin.php:887
 msgid "Аватаров в WebP"
 msgstr ""
 
-#: includes/class-mmf-admin.php:859
+#: includes/class-mmf-admin.php:888
 msgid "Экономия WebP, КБ"
 msgstr ""
 
-#: includes/class-mmf-admin.php:860
+#: includes/class-mmf-admin.php:889
 msgid "Ошибок WebP"
 msgstr ""
 
-#: includes/class-mmf-admin.php:861
+#: includes/class-mmf-admin.php:890
 msgid "WebP на сервере"
 msgstr ""
 
-#: includes/class-mmf-admin.php:861
+#: includes/class-mmf-admin.php:890
 msgid "доступен"
 msgstr ""
 
-#: includes/class-mmf-admin.php:861 includes/class-mmf-admin.php:883
+#: includes/class-mmf-admin.php:890
 msgid "недоступен"
 msgstr ""
 
-#: includes/class-mmf-admin.php:872
-msgid "Картинки WebP"
-msgstr ""
-
-#: includes/class-mmf-admin.php:874
-msgid "Создано WebP"
-msgstr ""
-
-#: includes/class-mmf-admin.php:875
-msgid "Пересоздано WebP"
-msgstr ""
-
-#: includes/class-mmf-admin.php:876
-msgid "WebP уже был"
-msgstr ""
-
-#: includes/class-mmf-admin.php:877
-msgid "Исходник уже WebP"
-msgstr ""
-
-#: includes/class-mmf-admin.php:878
-msgid "Отдано WebP"
-msgstr ""
-
-#: includes/class-mmf-admin.php:879
-msgid "Сэкономлено, КБ"
-msgstr ""
-
-#: includes/class-mmf-admin.php:880
-msgid "Ошибок конвертации"
-msgstr ""
-
-#: includes/class-mmf-admin.php:881
-msgid "Пропущено: меньше 10 КБ"
-msgstr ""
-
-#: includes/class-mmf-admin.php:882
-msgid "Пропущено: WebP больше"
-msgstr ""
-
-#: includes/class-mmf-admin.php:883
-msgid "Конвертер"
-msgstr ""
-
-#: includes/class-mmf-admin.php:895 includes/class-mmf-admin.php:905
+#: includes/class-mmf-admin.php:908 includes/class-mmf-admin.php:918
 msgid "Файлов в кеше"
 msgstr ""
 
-#: includes/class-mmf-admin.php:899 includes/class-mmf-admin.php:906
+#: includes/class-mmf-admin.php:912 includes/class-mmf-admin.php:919
 msgid "Размер кеша"
 msgstr ""
 
-#: includes/class-mmf-admin.php:903
+#: includes/class-mmf-admin.php:916
 msgid "Кеш и ошибки"
 msgstr ""
 
-#: includes/class-mmf-admin.php:907
+#: includes/class-mmf-admin.php:920
 msgid "Самый старый файл"
 msgstr ""
 
-#: includes/class-mmf-admin.php:907
+#: includes/class-mmf-admin.php:920 includes/class-mmf-admin.php:2119
 msgid "—"
 msgstr ""
 
-#: includes/class-mmf-admin.php:908
+#: includes/class-mmf-admin.php:921
 msgid "TTL, дней"
 msgstr ""
 
-#: includes/class-mmf-admin.php:908
+#: includes/class-mmf-admin.php:921
 msgid "без ограничения"
 msgstr ""
 
-#: includes/class-mmf-admin.php:909
+#: includes/class-mmf-admin.php:922
 msgid "Последняя очистка"
 msgstr ""
 
-#: includes/class-mmf-admin.php:909 includes/class-mmf-admin.php:910
+#: includes/class-mmf-admin.php:922 includes/class-mmf-admin.php:923
 msgid "ещё не было"
 msgstr ""
 
-#: includes/class-mmf-admin.php:910
+#: includes/class-mmf-admin.php:923
 msgid "Кеш обновлён"
 msgstr ""
 
-#: includes/class-mmf-admin.php:911
+#: includes/class-mmf-admin.php:924
 msgid "Каталог"
 msgstr ""
 
-#: includes/class-mmf-admin.php:912
+#: includes/class-mmf-admin.php:925
 msgid "Доступен для записи"
 msgstr ""
 
-#: includes/class-mmf-admin.php:912
+#: includes/class-mmf-admin.php:925
 msgid "да"
 msgstr ""
 
-#: includes/class-mmf-admin.php:912
+#: includes/class-mmf-admin.php:925
 msgid "нет"
 msgstr ""
 
-#: includes/class-mmf-admin.php:922
+#: includes/class-mmf-admin.php:935
 msgid "Счётчики накопительные и записываются не чаще раза в минуту."
 msgstr ""
 
-#: includes/class-mmf-admin.php:923
+#: includes/class-mmf-admin.php:936
 msgid "Кеш очищается только вручную: файлы с прежними именами остаются, чтобы страницы из кеша не запрашивали удалённые файлы."
 msgstr ""
 
-#: includes/class-mmf-admin.php:948
+#: includes/class-mmf-admin.php:950
 msgid "Сбросить кеш"
 msgstr ""
 
-#: includes/class-mmf-admin.php:949
-msgid "Удалить все WebP"
-msgstr ""
-
-#: includes/class-mmf-admin.php:973
+#: includes/class-mmf-admin.php:974
 msgid "Безопасный набор для обычного сайта: включает минификацию, локальные шрифты и граватары, выключает рискованные режимы."
 msgstr ""
 
-#: includes/class-mmf-admin.php:977
+#: includes/class-mmf-admin.php:978
 msgid "Применить рекомендуемые настройки"
 msgstr ""
 
-#: includes/class-mmf-admin.php:978 includes/class-mmf-admin.php:982
+#: includes/class-mmf-admin.php:979 includes/class-mmf-admin.php:983
 msgid "Что изменится"
 msgstr ""
 
-#: includes/class-mmf-admin.php:989
+#: includes/class-mmf-admin.php:990
 msgid "Не изменяются: исключения, шаблоны async/defer, лимиты, TTL, тестовый режим."
 msgstr ""
 
-#: includes/class-mmf-admin.php:990
+#: includes/class-mmf-admin.php:991
 msgid "Применить"
 msgstr ""
 
-#: includes/class-mmf-admin.php:990
+#: includes/class-mmf-admin.php:991
 msgid "Отмена"
 msgstr ""
 
-#: includes/class-mmf-admin.php:998
+#: includes/class-mmf-admin.php:999
 msgid "HTML сжимается на лету, файлы не создаются. CSS и JS копируются в uploads/mmf/ один раз на каждую версию файла — иначе их пришлось бы сжимать на каждом запросе. Копии удаляются по TTL и при удалении плагина."
 msgstr ""
 
-#: includes/class-mmf-admin.php:1010 includes/class-mmf-admin.php:1024
+#: includes/class-mmf-admin.php:1011 includes/class-mmf-admin.php:1025
 msgid "локально"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1012 includes/class-mmf-admin.php:1016 includes/class-mmf-admin.php:1021 includes/class-mmf-admin.php:1025
+#: includes/class-mmf-admin.php:1013 includes/class-mmf-admin.php:1017 includes/class-mmf-admin.php:1022 includes/class-mmf-admin.php:1026
 msgid "не трогать"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1015
+#: includes/class-mmf-admin.php:1016
 msgid "инлайном"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1019
+#: includes/class-mmf-admin.php:1020
 msgid "хеш"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1020 includes/class-mmf-admin.php:1026
+#: includes/class-mmf-admin.php:1021 includes/class-mmf-admin.php:1027
 msgid "удалить"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1031 includes/class-mmf-admin.php:1035
+#: includes/class-mmf-admin.php:1032 includes/class-mmf-admin.php:1036
 msgid "включить"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1031 includes/class-mmf-admin.php:1035
+#: includes/class-mmf-admin.php:1032 includes/class-mmf-admin.php:1036
 msgid "выключить"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1064
+#: includes/class-mmf-admin.php:1065
 msgid "Рекомендуется включить"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1090 includes/class-mmf-admin.php:1100
+#: includes/class-mmf-admin.php:1091 includes/class-mmf-admin.php:1101
 msgid "Рекомендуем выключить"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1107
+#: includes/class-mmf-admin.php:1108
 msgid "Рекомендуем: %s"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1127 includes/class-mmf-admin.php:1128
+#: includes/class-mmf-admin.php:1128 includes/class-mmf-admin.php:1129
 msgid "объединение на HTTP/2 чаще вредит"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1129 includes/class-mmf-admin.php:1130
+#: includes/class-mmf-admin.php:1130 includes/class-mmf-admin.php:1131
 msgid "отложенная загрузка ломает порядок скриптов"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1131
+#: includes/class-mmf-admin.php:1132
 msgid "чужой код может зависеть от порядка загрузки"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1132
+#: includes/class-mmf-admin.php:1133
 msgid "с версией в URL видно, какой у сайта WordPress"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1139
+#: includes/class-mmf-admin.php:1140
 msgid "значение выбрано как безопасное для обычного сайта"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1166
+#: includes/class-mmf-admin.php:1167
 msgid "Последнее действие"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1169
+#: includes/class-mmf-admin.php:1170
 msgid "Пока ничего не менялось."
 msgstr ""
 
-#: includes/class-mmf-admin.php:1186
+#: includes/class-mmf-admin.php:1187
 msgid "Минификация"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1187
+#: includes/class-mmf-admin.php:1188
 msgid "HTML"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1190
+#: includes/class-mmf-admin.php:1191
 msgid "Инлайн-блоки"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1191
+#: includes/class-mmf-admin.php:1192
 msgid "Пакеты CSS"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1192
+#: includes/class-mmf-admin.php:1193
 msgid "Пакеты JS"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1193
+#: includes/class-mmf-admin.php:1194
 msgid "Встраивание CSS"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1194
+#: includes/class-mmf-admin.php:1195
 msgid "Print-стили"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1197
+#: includes/class-mmf-admin.php:1198
 msgid "Локализация CDN"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1198
+#: includes/class-mmf-admin.php:1199
 msgid "Google Fonts локально"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1200
+#: includes/class-mmf-admin.php:1201
 msgid "Font Awesome инлайном"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1201
+#: includes/class-mmf-admin.php:1202
 msgid "defer внешних"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1202
+#: includes/class-mmf-admin.php:1203
 msgid "Граватары локально"
 msgstr ""
 
 #: includes/class-mmf-admin.php:1204
-msgid "Скрытие версий"
-msgstr ""
-
-#: includes/class-mmf-admin.php:1205
-msgid "Версия в URL"
+msgid "WebP картинок"
 msgstr ""
 
 #: includes/class-mmf-admin.php:1206
-msgid "Generator"
+msgid "Скрытие версий"
 msgstr ""
 
 #: includes/class-mmf-admin.php:1207
-msgid "Emoji-скрипты"
+msgid "Версия в URL"
+msgstr ""
+
+#: includes/class-mmf-admin.php:1208
+msgid "Generator"
 msgstr ""
 
 #: includes/class-mmf-admin.php:1209
+msgid "Emoji-скрипты"
+msgstr ""
+
+#: includes/class-mmf-admin.php:1211
 msgid "Прочее"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1210
+#: includes/class-mmf-admin.php:1212
 msgid "Скрипты в подвале"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1211 includes/class-mmf-admin.php:1676
+#: includes/class-mmf-admin.php:1213 includes/class-mmf-admin.php:2130
 msgid "Delay JS"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1212
+#: includes/class-mmf-admin.php:1214
 msgid "Rocket-режим"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1230
+#: includes/class-mmf-admin.php:1232
 msgid "включено"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1230
+#: includes/class-mmf-admin.php:1232
 msgid "выключено"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1253
+#: includes/class-mmf-admin.php:1255
 msgid "обычный"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1256
+#: includes/class-mmf-admin.php:1258
 msgid "отложен"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1257 includes/class-mmf-admin.php:1289
+#: includes/class-mmf-admin.php:1259 includes/class-mmf-admin.php:1291
 msgid "инлайн"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1261
+#: includes/class-mmf-admin.php:1263
 msgid "Скрипты последней учтённой страницы"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1264
+#: includes/class-mmf-admin.php:1266
 msgid "Данных пока нет: страница ещё не обрабатывалась."
 msgstr ""
 
-#: includes/class-mmf-admin.php:1279
+#: includes/class-mmf-admin.php:1281
 msgid "defer применён, но в списке есть скрипты в обычном режиме — это и есть причина ошибок порядка в консоли."
 msgstr ""
 
-#: includes/class-mmf-admin.php:1283
+#: includes/class-mmf-admin.php:1285
 msgid "Скрипт"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1284
+#: includes/class-mmf-admin.php:1286
 msgid "Режим"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1285
+#: includes/class-mmf-admin.php:1287
 msgid "Позиция"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1308
+#: includes/class-mmf-admin.php:1310
 msgid "Внешние хосты на последней учтённой странице"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1311
+#: includes/class-mmf-admin.php:1313
 msgid "Внешних файлов не найдено."
 msgstr ""
 
-#: includes/class-mmf-admin.php:1318
+#: includes/class-mmf-admin.php:1320
 msgid "локализован"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1319
+#: includes/class-mmf-admin.php:1321
 msgid "оставлен внешним (исключение)"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1320
+#: includes/class-mmf-admin.php:1322
 msgid "оставлен внешним (режим)"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1321
+#: includes/class-mmf-admin.php:1323
 msgid "не удалось скачать"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1322
+#: includes/class-mmf-admin.php:1324
 msgid "тег удалён"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1326 includes/class-mmf-admin.php:1372
+#: includes/class-mmf-admin.php:1328 includes/class-mmf-admin.php:1374
 msgid "Хост"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1327
+#: includes/class-mmf-admin.php:1329
 msgid "Что сделано"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1368
+#: includes/class-mmf-admin.php:1370
 msgid "Встроенные исключения"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1369
+#: includes/class-mmf-admin.php:1371
 msgid "Эти хосты не локализуются: их скрипты сверяют домен в Referer или Origin, и локальная копия ломает виджет. Список не редактируется."
 msgstr ""
 
-#: includes/class-mmf-admin.php:1373
+#: includes/class-mmf-admin.php:1375
 msgid "Причина"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1374
+#: includes/class-mmf-admin.php:1376
 msgid "Оставить внешним"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1380
+#: includes/class-mmf-admin.php:1382
 msgid "домен и поддомены"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1382
+#: includes/class-mmf-admin.php:1384
 msgid "не редактируется"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1395
+#: includes/class-mmf-admin.php:1397
 msgid "Свои исключения"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1396
+#: includes/class-mmf-admin.php:1398
 msgid "Хост или часть URL на строку. Пустые строки при сохранении отбрасываются."
 msgstr ""
 
-#: includes/class-mmf-admin.php:1399
+#: includes/class-mmf-admin.php:1401
 msgid "Хост или часть URL"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1400
+#: includes/class-mmf-admin.php:1402 includes/class-mmf-admin.php:2099
 msgid "Действие"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1410
+#: includes/class-mmf-admin.php:1412
 msgid "Добавить исключение"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1427
+#: includes/class-mmf-admin.php:1429
 msgid "Убрать"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1439
+#: includes/class-mmf-admin.php:1441
 msgid "Тестовый режим: оптимизация применяется только к администраторам, посетители видят исходную страницу."
 msgstr ""
 
-#: includes/class-mmf-admin.php:1465
+#: includes/class-mmf-admin.php:1467
 msgid "Выбранные шаблоны добавлены в список, кеш сброшен."
 msgstr ""
 
-#: includes/class-mmf-admin.php:1466
+#: includes/class-mmf-admin.php:1468
 msgid "Сгенерированные WebP удалены."
 msgstr ""
 
-#: includes/class-mmf-admin.php:1494
+#: includes/class-mmf-admin.php:1496
 msgid "Закрыть уведомление"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1518
+#: includes/class-mmf-admin.php:1520
 msgid "Rocket-режим не активирован: на сайте есть Content-Security-Policy без nonce для нашего загрузчика. Разрешите nonce (плагин политики фильтрует wp_inline_script_attributes) или добавьте в политику хеш:"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1526
+#: includes/class-mmf-admin.php:1528
 msgid "Rocket-режим откладывает все скрипты, поэтому список Delay JS не действует: если файл попал в оба, побеждает Rocket-режим."
 msgstr ""
 
-#: includes/class-mmf-admin.php:1539 includes/class-mmf-admin.php:1569
+#: includes/class-mmf-admin.php:1541 includes/class-mmf-admin.php:1571
 msgid "Недостаточно прав."
 msgstr ""
 
-#: includes/class-mmf-admin.php:1545
+#: includes/class-mmf-admin.php:1547
 msgid "Удалено WebP-файлов: %d."
 msgstr ""
 
-#: includes/class-mmf-admin.php:1600
+#: includes/class-mmf-admin.php:1602
 msgid "Добавлено шаблонов в список: %1$d, кеш сброшен (удалено файлов: %2$d)."
 msgstr ""
 
-#: includes/class-mmf-admin.php:1602
+#: includes/class-mmf-admin.php:1604
 msgid "Выбранные шаблоны уже есть в списке."
 msgstr ""
 
-#: includes/class-mmf-admin.php:1628
-msgid "Что можно отложить"
+#: includes/class-mmf-admin.php:1960
+msgid "Стили"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1631
+#: includes/class-mmf-admin.php:1963 includes/class-mmf-admin.php:2077
 msgid "Данных пока нет: откройте любую страницу сайта."
 msgstr ""
 
-#. translators: 1: blocking requests, 2: deferable requests, 3: kilobytes.
-#: includes/class-mmf-admin.php:1641
-msgid "Блокирующих запросов: %1$d, можно отложить: %2$d (≈ %3$s КиБ)"
+#: includes/class-mmf-admin.php:1970
+msgid "Стиль"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1650
-msgid "Ресурс"
-msgstr ""
-
-#: includes/class-mmf-admin.php:1651
+#: includes/class-mmf-admin.php:1971 includes/class-mmf-admin.php:2097
 msgid "Размер"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1652
+#: includes/class-mmf-admin.php:1972 includes/class-mmf-admin.php:2098
 msgid "Вердикт"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1653
-msgid "Отложить"
+#: includes/class-mmf-admin.php:1998
+msgid "альфа, lossless, качество"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1665
+#: includes/class-mmf-admin.php:1999
+msgid "альфа и качество; lossless PNG недоступен"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2000
+msgid "альфа, lossless и качество; внешний бинарь"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2003
+msgid "Конвертер"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2006
+msgid "Ни Imagick, ни GD с WebP, ни cwebp не найдены. Конвертация недоступна, настройки ниже ничего не меняют. Нужно расширение PHP с поддержкой WebP или бинарь cwebp."
+msgstr ""
+
+#: includes/class-mmf-admin.php:2009
+msgid "Определяется один раз при первом запросе. Порядок выбора: Imagick, затем GD, затем cwebp."
+msgstr ""
+
+#: includes/class-mmf-admin.php:2015
+msgid "Массовая конвертация"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2016
+msgid "Только JPEG и PNG без свежей WebP-копии. Пакетами по 20 вложений, только в админке; уже готовые пропускаются."
+msgstr ""
+
+#: includes/class-mmf-admin.php:2017
+msgid "обработано 0 из 0"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2021
+msgid "Конвертировать существующие изображения"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2022
+msgid "Пауза"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2023
+msgid "Продолжить"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2024
+msgid "Остановить"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2027
+msgid "Правила"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2028
+msgid "Пропускаются файлы меньше 10 КБ, GIF, SVG, битые картинки, исходники, которые уже WebP, и свежие готовые копии."
+msgstr ""
+
+#: includes/class-mmf-admin.php:2029
+msgid "Если WebP получился больше оригинала, копия удаляется и отдаётся оригинал."
+msgstr ""
+
+#: includes/class-mmf-admin.php:2030
+msgid "Оригиналы не изменяются и не удаляются; копия удаляется вместе с вложением или кнопкой ниже."
+msgstr ""
+
+#: includes/class-mmf-admin.php:2031
+msgid "Отдача — только браузерам с Accept: image/webp и только при существующей свежей копии."
+msgstr ""
+
+#: includes/class-mmf-admin.php:2035
+msgid "Счётчики WebP"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2037
+msgid "Создано"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2038
+msgid "Пересоздано"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2039
+msgid "WebP уже был"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2040
+msgid "Исходник уже WebP"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2041
+msgid "Отдано"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2042
+msgid "Сэкономлено, КБ"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2043
+msgid "Ошибок"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2044
+msgid "Пропущено: меньше 10 КБ"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2045
+msgid "Пропущено: WebP больше"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2046
+msgid "Аватаров WebP"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2047
+msgid "В очереди на конвертацию"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2048
+msgid "Не отдано: файла нет"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2063
+msgid "Удалить все созданные WebP"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2074
+msgid "Что можно отложить"
+msgstr ""
+
+#. translators: 1: blocking requests, 2: deferable requests, 3: kilobytes.
+#: includes/class-mmf-admin.php:2087
+msgid "Блокирующих запросов: %1$d, можно отложить: %2$d (≈ %3$s КиБ)"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2096
+msgid "Ресурс"
+msgstr ""
+
+#: includes/class-mmf-admin.php:2117
 msgid "добавить"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1676
+#: includes/class-mmf-admin.php:2130
 msgid "Не откладывать (defer_skip)"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1677
+#: includes/class-mmf-admin.php:2131
 msgid "Отсрочить выбранные"
 msgstr ""
 
-#: includes/class-mmf-admin.php:1680
+#: includes/class-mmf-admin.php:2134
 msgid "Настройки не меняются, пока вы не нажмёте кнопку. Будут добавлены только отмеченные шаблоны."
 msgstr ""
 
-#: includes/class-mmf-admin.php:1890
+#: includes/class-mmf-admin.php:2428
 msgid "Очистить весь кеш минифицированных файлов, шрифтов и стилей?"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:228
+#: includes/class-mmf-admin.php:2430
+msgid "Удалить все созданные WebP? Оригиналы останутся."
+msgstr ""
+
+#: includes/class-mmf-advisor.php:314
+msgid "локальный"
+msgstr ""
+
+#: includes/class-mmf-advisor.php:315 includes/class-mmf-assets.php:834
+msgid "внешний"
+msgstr ""
+
+#: includes/class-mmf-advisor.php:316
+msgid "внешний (исключение)"
+msgstr ""
+
+#: includes/class-mmf-advisor.php:329
 msgid "можно отложить"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:229
+#: includes/class-mmf-advisor.php:330
 msgid "рискованно"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:230
+#: includes/class-mmf-advisor.php:331
 msgid "нельзя"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:231
+#: includes/class-mmf-advisor.php:332
 msgid "уже отложен"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:244
+#: includes/class-mmf-advisor.php:345
 msgid "счётчик аналитики, до отрисовки не нужен"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:245
+#: includes/class-mmf-advisor.php:346
 msgid "конверсионный пиксель, до отрисовки не нужен"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:246
+#: includes/class-mmf-advisor.php:347
 msgid "чат загружается по требованию, до отрисовки не нужен"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:247
+#: includes/class-mmf-advisor.php:348
 msgid "CSS блокирует отрисовку: его надо объединять, а не откладывать"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:248
+#: includes/class-mmf-advisor.php:349
 msgid "наш собственный ресурс, его режимом управляет плагин"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:249
+#: includes/class-mmf-advisor.php:350
 msgid "defer, async, Delay JS или Rocket уже применены"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:250
+#: includes/class-mmf-advisor.php:351
 msgid "это jQuery, от него зависят другие скрипты"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:251
+#: includes/class-mmf-advisor.php:352
 msgid "type=\"module\", порядок загрузки задаёт браузер"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:252
+#: includes/class-mmf-advisor.php:353
 msgid "после него инлайн-код, который может от него зависеть"
 msgstr ""
 
-#: includes/class-mmf-advisor.php:253
+#: includes/class-mmf-advisor.php:354
 msgid "локальный скрипт темы или плагина: неизвестно, нужен ли он до отрисовки"
+msgstr ""
+
+#: includes/class-mmf-advisor.php:355
+msgid "внешний скрипт, домен не из списка известных"
+msgstr ""
+
+#: includes/class-mmf-advisor.php:356
+msgid "антиспам, капча или платёжный виджет: должен успеть до отправки формы"
+msgstr ""
+
+#: includes/class-mmf-advisor.php:357
+msgid "CSS темы: формирует первый экран"
+msgstr ""
+
+#: includes/class-mmf-advisor.php:358
+msgid "CSS плагина: влияние на первый экран неизвестно"
 msgstr ""
 
 #: includes/class-mmf-assets.php:785
@@ -1311,10 +1451,6 @@ msgstr ""
 
 #: includes/class-mmf-assets.php:829
 msgid "не откладывать"
-msgstr ""
-
-#: includes/class-mmf-assets.php:834
-msgid "внешний"
 msgstr ""
 
 #: includes/class-mmf-assets.php:845

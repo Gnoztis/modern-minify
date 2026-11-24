@@ -34,6 +34,33 @@ final class MMF_Advisor {
 
 	public const DONE = 'done';
 
+	public const LOCAL = 'local';
+	public const EXTERNAL = 'external';
+	public const EXTERNAL_KNOWN = 'external-known';
+
+	/**
+	 * Third-party hosts that must run before a form is submitted.
+	 *
+	 * Anti-spam checks, captchas and payment widgets either protect a form or
+	 * validate a payment; delaying them breaks the action instead of speeding
+	 * the page up. Values are reason keys.
+	 */
+	public const CRITICAL_THIRD_PARTY = array(
+		'cleantalk.org'             => 'antispam',
+		'fd-cleantalk.org'          => 'antispam',
+		'hcaptcha.com'              => 'captcha',
+		'recaptcha.net'             => 'captcha',
+		'www.google.com'            => 'captcha',
+		'challenges.cloudflare.com' => 'captcha',
+		'yoomoney.ru'               => 'payment',
+		'yookassa.ru'               => 'payment',
+		'securepay.tinkoff.ru'      => 'payment',
+		'checkout.qiwi.com'         => 'payment',
+		'js.stripe.com'             => 'payment',
+		'checkout.stripe.com'       => 'payment',
+		'paypal.com'                => 'payment',
+	);
+
 	/**
 	 * Hosts (or host + path) that are not needed before the first paint.
 	 *
@@ -89,6 +116,10 @@ final class MMF_Advisor {
 				continue;
 			}
 
+			if ( false !== strpos( strtolower( $url ), '/mmf/' ) ) {
+				continue;
+			}
+
 			$items[] = self::verdict( $resource );
 		}
 
@@ -126,17 +157,26 @@ final class MMF_Advisor {
 		$url    = (string) ( $resource['url'] ?? '' );
 		$name   = (string) ( $resource['name'] ?? '' );
 		$mode   = (string) ( $resource['mode'] ?? 'normal' );
+		$host   = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
+		$source = self::source( $url );
 		$reason = '';
 
-		if ( 'css' === $kind ) {
-			$verdict = self::CANNOT;
-			$reason  = 'css';
-		} elseif ( in_array( $mode, array( 'defer', 'async', 'delayed', 'rocket' ), true ) ) {
+		if ( in_array( $mode, array( 'defer', 'async', 'delayed', 'rocket' ), true ) ) {
 			$verdict = self::DONE;
 			$reason  = 'already';
-		} elseif ( preg_match( '#/mmf/|^mmf#i', $url . ' ' . $name ) ) {
-			$verdict = self::CANNOT;
-			$reason  = 'own';
+		} elseif ( 'css' === $kind ) {
+			$path = strtolower( (string) wp_parse_url( $url, PHP_URL_PATH ) );
+
+			if ( str_contains( $path, '/themes/' ) ) {
+				$verdict = self::CANNOT;
+				$reason  = 'css-theme';
+			} elseif ( str_contains( $path, '/plugins/' ) ) {
+				$verdict = self::RISKY;
+				$reason  = 'css-plugin';
+			} else {
+				$verdict = self::CANNOT;
+				$reason  = 'css';
+			}
 		} elseif ( false !== stripos( $url . ' ' . $name, 'jquery' ) ) {
 			$verdict = self::RISKY;
 			$reason  = 'jquery';
@@ -146,16 +186,24 @@ final class MMF_Advisor {
 		} elseif ( ! empty( $resource['inline_after'] ) ) {
 			$verdict = self::RISKY;
 			$reason  = 'inline-after';
-		} else {
-			$known = self::known_reason( $url );
-
-			if ( '' !== $known ) {
-				$verdict = self::CAN;
-				$reason  = $known;
+		} elseif ( self::LOCAL !== $source ) {
+			if ( self::host_in( $host, self::CRITICAL_THIRD_PARTY ) ) {
+				$verdict = self::CANNOT;
+				$reason  = 'third-party-critical';
 			} else {
-				$verdict = self::RISKY;
-				$reason  = 'local';
+				$known = self::known_reason( $url );
+
+				if ( '' !== $known ) {
+					$verdict = self::CAN;
+					$reason  = $known;
+				} else {
+					$verdict = self::RISKY;
+					$reason  = 'external-unknown';
+				}
 			}
+		} else {
+			$verdict = self::RISKY;
+			$reason  = 'local';
 		}
 
 		return array(
@@ -164,9 +212,47 @@ final class MMF_Advisor {
 			'size'     => (int) ( $resource['size'] ?? 0 ),
 			'verdict'  => $verdict,
 			'reason'   => $reason,
+			'source'   => $source,
 			'pattern'  => self::pattern( $url ),
 			'position' => (int) ( $resource['position'] ?? 0 ),
 		);
+	}
+
+	/**
+	 * Where a resource comes from.
+	 *
+	 * A third-party host that is in the external exclusion list is still
+	 * external; the badge says so and the reason explains the exception.
+	 *
+	 * @param string $url Resource URL.
+	 */
+	private static function source( string $url ): string {
+		if ( MMF_Assets::is_local_url( $url ) ) {
+			return self::LOCAL;
+		}
+
+		$host = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
+
+		return MMF_External::host_is_excluded( $host ) ? self::EXTERNAL_KNOWN : self::EXTERNAL;
+	}
+
+	/**
+	 * Exact-or-dotted-suffix host match, the same normalisation the external
+	 * handler uses.
+	 *
+	 * @param string                $host  Host.
+	 * @param array<string,string>  $hosts Hosts with reason keys.
+	 */
+	private static function host_in( string $host, array $hosts ): bool {
+		foreach ( array_keys( $hosts ) as $needle ) {
+			$needle = strtolower( (string) $needle );
+
+			if ( $host === $needle || str_ends_with( $host, '.' . $needle ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -219,6 +305,21 @@ final class MMF_Advisor {
 	}
 
 	/**
+	 * Human source badge.
+	 *
+	 * @param string $source Source constant.
+	 */
+	public static function source_label( string $source ): string {
+		$labels = array(
+			self::LOCAL          => __( 'локальный', 'modern-minify' ),
+			self::EXTERNAL       => __( 'внешний', 'modern-minify' ),
+			self::EXTERNAL_KNOWN => __( 'внешний (исключение)', 'modern-minify' ),
+		);
+
+		return $labels[ $source ] ?? $source;
+	}
+
+	/**
 	 * Human verdict.
 	 *
 	 * @param string $verdict One of the class constants.
@@ -251,6 +352,10 @@ final class MMF_Advisor {
 			'module'       => __( 'type="module", порядок загрузки задаёт браузер', 'modern-minify' ),
 			'inline-after' => __( 'после него инлайн-код, который может от него зависеть', 'modern-minify' ),
 			'local'        => __( 'локальный скрипт темы или плагина: неизвестно, нужен ли он до отрисовки', 'modern-minify' ),
+			'external-unknown' => __( 'внешний скрипт, домен не из списка известных', 'modern-minify' ),
+			'third-party-critical' => __( 'антиспам, капча или платёжный виджет: должен успеть до отправки формы', 'modern-minify' ),
+			'css-theme'    => __( 'CSS темы: формирует первый экран', 'modern-minify' ),
+			'css-plugin'   => __( 'CSS плагина: влияние на первый экран неизвестно', 'modern-minify' ),
 		);
 
 		return $labels[ $reason ] ?? $reason;
