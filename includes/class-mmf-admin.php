@@ -91,6 +91,7 @@ final class MMF_Admin {
 			'external_mode'    => 'local',
 			'merge_js'         => false,
 			'merge_css'        => false,
+			'defer_js'         => false,
 			'delay_js'         => array(),
 			'rocket_mode'      => false,
 			'defer_external'   => false,
@@ -115,6 +116,7 @@ final class MMF_Admin {
 			__( 'Объединение файлов — выключить', 'modern-minify' ),
 			__( 'Delay JS — выключить (список шаблонов будет очищен)', 'modern-minify' ),
 			__( 'Rocket-режим — выключить', 'modern-minify' ),
+			__( 'defer для локальных скриптов — выключить', 'modern-minify' ),
 			__( 'defer для внешних — выключить', 'modern-minify' ),
 		);
 	}
@@ -141,7 +143,38 @@ final class MMF_Admin {
 
 		check_admin_referer( self::RECOMMENDED_NONCE );
 
-		MMF_Config::update( self::recommended_profile() );
+		$profile = self::recommended_profile();
+		$current = MMF_Config::all();
+		$matches = true;
+
+		foreach ( $profile as $key => $value ) {
+			$now = $current[ $key ] ?? null;
+
+			if ( is_array( $value ) ? (array) $now !== $value : ( is_bool( $value ) ? (bool) $now !== $value : (string) $now !== (string) $value ) ) {
+				$matches = false;
+				break;
+			}
+		}
+
+		if ( $matches ) {
+			MMF_Stats::record_action( __( 'Настройки уже соответствуют рекомендуемым.', 'modern-minify' ) );
+
+			wp_safe_redirect(
+				add_query_arg(
+					array(
+						'page'            => self::PAGE,
+						'mmf-toast'       => 'recommended-noop',
+						'mmf-toast-nonce' => wp_create_nonce( self::TOAST_NONCE ),
+					),
+					admin_url( 'options-general.php' )
+				)
+			);
+			exit;
+		}
+
+		// A set operation: applying the profile twice must leave exactly the
+		// same state, and nothing outside the profile is touched.
+		MMF_Config::update( $profile );
 		$deleted = MMF_Cache::delete_all();
 
 		MMF_Stats::record_action( sprintf( __( 'Рекомендуемые настройки применены, кеш сброшен (удалено файлов: %d).', 'modern-minify' ), (int) $deleted ) );
@@ -630,8 +663,9 @@ final class MMF_Admin {
 		$type  = (string) ( $field['type'] ?? 'bool' );
 
 		echo '<tr class="' . ( 'bool' === $type ? 'mmf-row--bool' : 'mmf-row' ) . '"><th scope="row">';
-		echo '<label for="' . esc_attr( $id ) . '">' . esc_html( $label ) . '</label>';
-		self::render_recommended_badge( $key, $value, $field );
+		echo '<label for="' . esc_attr( $id ) . '">' . esc_html( $label );
+		echo self::recommended_badge( $key, $value );
+		echo '</label>';
 		echo '</th><td>';
 
 		if ( 'bool' === $type ) {
@@ -676,6 +710,8 @@ final class MMF_Admin {
 
 			echo '</select>';
 		}
+
+		echo self::recommended_warning( $key, $value );
 
 		if ( '' !== $help && 'bool' !== $type ) {
 			echo '<p class="description">' . esc_html( $help ) . '</p>';
@@ -868,44 +904,102 @@ final class MMF_Admin {
 	}
 
 	/**
-	 * Prints the "(Рекомендуемые)" badge of a field that is part of the profile.
+	 * Returns the badge for a field whose recommended value is "on" and is off.
 	 *
-	 * The profile is the only source: a field is in the badge set exactly when
-	 * `recommended_profile()` has it, and the badge shows the recommended value
-	 * whenever the current value differs.
+	 * Only that one direction gets a badge; every other deviation is a warning
+	 * under the field, and a matching value shows nothing at all. This keeps the
+	 * two mechanisms from overlapping.
 	 *
-	 * @param string              $key   Setting name.
-	 * @param mixed               $value Current value.
-	 * @param array<string,mixed> $field Field definition.
+	 * @param string $key   Setting name.
+	 * @param mixed  $value Current value.
 	 */
-	private static function render_recommended_badge( string $key, $value, array $field ): void {
+	private static function recommended_badge( string $key, $value ): string {
+		$profile = self::recommended_profile();
+
+		if ( ! array_key_exists( $key, $profile ) || ! is_bool( $profile[ $key ] ) || true !== $profile[ $key ] ) {
+			return '';
+		}
+
+		if ( (bool) $value === true ) {
+			return '';
+		}
+
+		return '<span class="mmf-badge mmf-badge--recommended">' . esc_html__( 'Рекомендуется включить', 'modern-minify' ) . '</span>';
+	}
+
+	/**
+	 * Returns the warning for any other deviation from the profile.
+	 *
+	 * A recommendation to turn something off always carries the reason; an enum
+	 * choice names the recommended value.
+	 *
+	 * @param string $key   Setting name.
+	 * @param mixed  $value Current value.
+	 */
+	private static function recommended_warning( string $key, $value ): string {
 		$profile = self::recommended_profile();
 
 		if ( ! array_key_exists( $key, $profile ) ) {
-			return;
+			return '';
 		}
 
 		$recommended = $profile[ $key ];
 
 		if ( is_array( $recommended ) ) {
-			$matches = (array) $value === $recommended;
-		} elseif ( is_bool( $recommended ) ) {
-			$matches = (bool) $value === $recommended;
-		} else {
-			$matches = (string) $value === (string) $recommended;
-		}
+			if ( (array) $value === $recommended ) {
+				return '';
+			}
 
-		if ( $matches ) {
-			$text  = __( 'Рекомендуется', 'modern-minify' );
-			$label = __( 'Значение совпадает с рекомендуемым', 'modern-minify' );
+			$text = __( 'Рекомендуем выключить', 'modern-minify' ) . ': ' . self::recommended_reason( $key );
+		} elseif ( is_bool( $recommended ) ) {
+			if ( (bool) $value === $recommended ) {
+				return '';
+			}
+
+			if ( $recommended ) {
+				return '';
+			}
+
+			$text = __( 'Рекомендуем выключить', 'modern-minify' ) . ': ' . self::recommended_reason( $key );
 		} else {
-			$label = self::recommended_value_label( $key, $recommended );
+			if ( (string) $value === (string) $recommended ) {
+				return '';
+			}
 
 			/* translators: %s: recommended value. */
-			$text = sprintf( __( 'Рекомендуется: %s', 'modern-minify' ), $label );
+			$text = sprintf( __( 'Рекомендуем: %s', 'modern-minify' ), self::recommended_value_label( $key, $recommended ) );
+
+			$reason = self::recommended_reason( $key, false );
+
+			if ( '' !== $reason ) {
+				$text .= ' — ' . $reason;
+			}
 		}
 
-		echo '<span class="mmf-badge mmf-badge--recommended" aria-label="' . esc_attr( $label ) . '">' . esc_html( $text ) . '</span>';
+		return '<p class="mmf-recommend-warning" role="status"><span class="dashicons dashicons-warning" aria-hidden="true"></span> ' . esc_html( $text ) . '</p>';
+	}
+
+	/**
+	 * Why a field is recommended the way it is.
+	 *
+	 * @param string $key      Setting name.
+	 * @param bool   $fallback Whether to return the generic fallback.
+	 */
+	private static function recommended_reason( string $key, bool $fallback = true ): string {
+		$reasons = array(
+			'merge_js'      => __( 'объединение на HTTP/2 чаще вредит', 'modern-minify' ),
+			'merge_css'     => __( 'объединение на HTTP/2 чаще вредит', 'modern-minify' ),
+			'delay_js'      => __( 'отложенная загрузка ломает порядок скриптов', 'modern-minify' ),
+			'rocket_mode'   => __( 'отложенная загрузка ломает порядок скриптов', 'modern-minify' ),
+			'defer_external' => __( 'чужой код может зависеть от порядка загрузки', 'modern-minify' ),
+			'ver_mode'      => __( 'с версией в URL видно, какой у сайта WordPress', 'modern-minify' ),
+		);
+
+		if ( isset( $reasons[ $key ] ) ) {
+			return (string) $reasons[ $key ];
+		}
+
+		return $fallback ? __( 'значение выбрано как безопасное для обычного сайта', 'modern-minify' ) : '';
 	}
 
 	/**
@@ -1228,6 +1322,7 @@ final class MMF_Admin {
 			'recommended' => sprintf( __( 'Рекомендуемые настройки применены, кеш сброшен (удалено файлов: %d).', 'modern-minify' ), $deleted ),
 			'test-on'     => __( 'Тестовый режим включён.', 'modern-minify' ),
 			'test-off'    => __( 'Тестовый режим выключен.', 'modern-minify' ),
+			'recommended-noop' => __( 'Настройки уже соответствуют рекомендуемым.', 'modern-minify' ),
 		);
 
 		$message = isset( $messages[ $type ] ) ? (string) $messages[ $type ] : '';
@@ -1315,13 +1410,14 @@ final class MMF_Admin {
 	 */
 	public static function inline_css(): string {
 		return <<<'CSS'
-.mmf-wrap{--mmf-bg:#fff;--mmf-surface:#f6f7f7;--mmf-fg:#1d2327;--mmf-muted:#50575e;--mmf-border:#c3c4c7;--mmf-accent:var(--wp-admin-theme-color,#2271b1);--mmf-ok-fg:#0a5c1c;--mmf-ok-bg:#edfaef;--mmf-err-fg:#7a0f0f;--mmf-err-bg:#fcf0f1;--mmf-toast-fg:#1d2327;--mmf-toast-bg:#fff;--mmf-chip-bg:#f6f7f7;--mmf-chip-off-fg:#50575e;--mmf-dot-on:#1a7f37;--mmf-dot-off:#8c8f94;--mmf-popover-bg:#1d2327;--mmf-popover-fg:#f0f0f1;--mmf-popover-muted:#dcdcde;--mmf-badge-bg:#f0f0f1;--mmf-badge-fg:#1d2327;--mmf-radius:8px;--mmf-gap:8px;--mmf-gap-2:16px;--mmf-gap-3:24px;color:var(--mmf-fg);max-width:1400px}
-@media (prefers-color-scheme: dark){.mmf-wrap{--mmf-bg:#1e1e1e;--mmf-surface:#2a2a2a;--mmf-fg:#f0f0f1;--mmf-muted:#c3c4c7;--mmf-border:#50575e;--mmf-ok-fg:#b8f0c3;--mmf-ok-bg:#14351c;--mmf-err-fg:#ffb3b3;--mmf-err-bg:#3d1414;--mmf-toast-fg:#f0f0f1;--mmf-toast-bg:#2a2a2a;--mmf-chip-bg:#2a2a2a;--mmf-chip-off-fg:#c3c4c7;--mmf-dot-on:#7bd88f;--mmf-badge-bg:#2a2a2a;--mmf-badge-fg:#f0f0f1;}}
-body.admin-color-midnight .mmf-wrap{--mmf-bg:#1e1e1e;--mmf-surface:#2a2a2a;--mmf-fg:#f0f0f1;--mmf-muted:#c3c4c7;--mmf-border:#50575e;--mmf-ok-fg:#b8f0c3;--mmf-ok-bg:#14351c;--mmf-err-fg:#ffb3b3;--mmf-err-bg:#3d1414;--mmf-toast-fg:#f0f0f1;--mmf-toast-bg:#2a2a2a;--mmf-chip-bg:#2a2a2a;--mmf-chip-off-fg:#c3c4c7;--mmf-dot-on:#7bd88f;--mmf-badge-bg:#2a2a2a;--mmf-badge-fg:#f0f0f1;}
+.mmf-wrap{--mmf-bg:#fff;--mmf-surface:#f6f7f7;--mmf-fg:#1d2327;--mmf-muted:#3c434a;--mmf-border:#c3c4c7;--mmf-accent:var(--wp-admin-theme-color,#2271b1);--mmf-ok-fg:#0a5c1c;--mmf-ok-bg:#edfaef;--mmf-err-fg:#7a0f0f;--mmf-err-bg:#fcf0f1;--mmf-toast-fg:#1d2327;--mmf-toast-bg:#fff;--mmf-chip-bg:#f6f7f7;--mmf-chip-off-fg:#3c434a;--mmf-dot-on:#1a7f37;--mmf-dot-off:#8c8f94;--mmf-popover-bg:#1d2327;--mmf-popover-fg:#f0f0f1;--mmf-popover-muted:#dcdcde;--mmf-badge-bg:#edfaef;--mmf-badge-fg:#0a5c1c;--mmf-warn-bg:#fcf9e8;--mmf-warn-fg:#1d2327;--mmf-radius:8px;--mmf-gap:8px;--mmf-gap-2:16px;--mmf-gap-3:24px;color:var(--mmf-fg);max-width:1400px}
 .mmf-wrap .mmf-tabs{margin-bottom:var(--mmf-gap-2)}
-.mmf-wrap .nav-tab{border-radius:0;background:transparent}
-.mmf-wrap .nav-tab-active,.mmf-wrap .nav-tab-active:hover{background:var(--mmf-bg);border-bottom-color:var(--mmf-bg)}
-.mmf-wrap .mmf-panel .form-table th{width:260px}
+.mmf-wrap .mmf-panel .form-table{table-layout:fixed;width:100%}
+.mmf-wrap .mmf-panel .form-table th{width:200px;overflow-wrap:anywhere}
+.mmf-wrap .mmf-panel .form-table th,.mmf-wrap .mmf-panel .form-table td{vertical-align:top}
+.mmf-wrap .mmf-panel .form-table input[type=text],.mmf-wrap .mmf-panel .form-table input[type=url],.mmf-wrap .mmf-panel .form-table textarea{width:100%;max-width:100%;box-sizing:border-box}
+.mmf-wrap .mmf-panel .form-table input[type=number],.mmf-wrap .mmf-panel .form-table select{max-width:100%;box-sizing:border-box}
+.mmf-wrap .mmf-panel .form-table textarea{min-height:96px}
 .mmf-wrap .mmf-card{background:var(--mmf-bg);border:1px solid var(--mmf-border);border-radius:var(--mmf-radius);padding:var(--mmf-gap-2);margin:0 0 var(--mmf-gap-2)}
 .mmf-wrap .mmf-section-title{margin:0 0 var(--mmf-gap);font-size:13px;line-height:1.4;text-transform:uppercase;letter-spacing:.04em;color:var(--mmf-muted);font-weight:600}
 .mmf-wrap .mmf-status{display:inline-block;padding:4px 12px;border-radius:999px;background:var(--mmf-ok-bg);color:var(--mmf-ok-fg);margin:0 0 var(--mmf-gap-2)}
@@ -1345,14 +1441,17 @@ body.admin-color-midnight .mmf-wrap{--mmf-bg:#1e1e1e;--mmf-surface:#2a2a2a;--mmf
 .mmf-wrap .mmf-actions{margin:var(--mmf-gap-2) 0 0}
 .mmf-wrap .mmf-toasts{position:fixed;top:48px;right:var(--mmf-gap-2);z-index:100000;display:flex;flex-direction:column;gap:var(--mmf-gap);max-width:360px}
 .mmf-wrap .mmf-toast{display:flex;gap:var(--mmf-gap);align-items:flex-start;background:var(--mmf-toast-bg);color:var(--mmf-toast-fg);border:1px solid var(--mmf-border);border-radius:var(--mmf-radius);padding:12px 16px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
-.mmf-wrap .mmf-toast--error{border-color:var(--mmf-err-fg);background:var(--mmf-err-bg);color:var(--mmf-err-fg)}
+.mmf-wrap .mmf-toast--success{border-left:4px solid #00a32a}
+.mmf-wrap .mmf-toast--error{border-left:4px solid #d63638}
 .mmf-wrap .mmf-toast__text{margin:0;flex:1}
 .mmf-wrap .mmf-toast__close{border:0;background:transparent;color:inherit;cursor:pointer;padding:0;line-height:1}
 .mmf-wrap .mmf-toast__icon{margin-top:2px}
 .mmf-wrap .mmf-alert{display:flex;gap:var(--mmf-gap);align-items:flex-start;border:1px solid var(--mmf-border);border-radius:var(--mmf-radius);padding:12px 16px;margin:0 0 var(--mmf-gap-2);background:var(--mmf-surface);color:var(--mmf-fg)}
 .mmf-wrap .mmf-alert--error{border-color:var(--mmf-err-fg);background:var(--mmf-err-bg);color:var(--mmf-err-fg)}
 .mmf-wrap .mmf-alert p{margin:0}
-.mmf-wrap .mmf-badge{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;background:var(--mmf-badge-bg);color:var(--mmf-badge-fg);font-size:11px;line-height:1.7;vertical-align:middle;white-space:nowrap}
+.mmf-wrap .mmf-badge{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;background:var(--mmf-badge-bg);color:var(--mmf-badge-fg);font-size:11px;line-height:1.7;vertical-align:baseline;white-space:nowrap}
+.mmf-wrap .mmf-recommend-warning{display:flex;align-items:flex-start;gap:6px;margin:8px 0 0;padding:8px 12px;border-radius:var(--mmf-radius);background:var(--mmf-warn-bg);color:var(--mmf-warn-fg);font-size:13px;max-width:100%;box-sizing:border-box}
+.mmf-wrap .mmf-recommend-warning .dashicons{font-size:16px;width:16px;height:16px;margin-top:2px;color:#b26200}
 .mmf-wrap .mmf-card .widefat{width:100%;max-width:100%}
 .mmf-wrap .mmf-report-table{table-layout:fixed;width:100%;border-collapse:collapse}
 .mmf-wrap .mmf-report-table th:first-child,.mmf-wrap .mmf-report-table td:first-child{width:60%}
@@ -1360,6 +1459,8 @@ body.admin-color-midnight .mmf-wrap{--mmf-bg:#1e1e1e;--mmf-surface:#2a2a2a;--mmf
 .mmf-wrap .mmf-report-table td{padding:8px 0;border-top:1px solid var(--mmf-border);vertical-align:top;overflow-wrap:anywhere}
 .mmf-wrap .mmf-report-table thead th{text-align:left}
 .mmf-wrap .mmf-badge--status{margin-left:0}
+.mmf-wrap .mmf-bool{display:inline-flex;align-items:center;gap:8px;flex-wrap:nowrap;max-width:100%}
+.mmf-wrap .mmf-bool__text{color:var(--mmf-muted);font-size:13px;flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
 .mmf-wrap .mmf-help{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;border:1px solid var(--mmf-border);background:var(--mmf-bg);color:var(--mmf-muted);cursor:pointer;margin-left:var(--mmf-gap);vertical-align:middle;padding:0}
 .mmf-wrap .mmf-help .dashicons{font-size:18px;width:18px;height:18px}
 .mmf-wrap .mmf-popover{position:absolute;max-width:320px;background:var(--mmf-popover-bg);color:var(--mmf-popover-fg);border-radius:var(--mmf-radius);padding:var(--mmf-gap-2);box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:100001;font-size:13px}
@@ -1376,6 +1477,8 @@ body.admin-color-midnight .mmf-wrap{--mmf-bg:#1e1e1e;--mmf-surface:#2a2a2a;--mmf
 @media (max-width:782px){.mmf-wrap .mmf-toasts{top:62px;left:var(--mmf-gap-2);right:var(--mmf-gap-2);max-width:none}}
 @media (prefers-reduced-motion: no-preference){.mmf-wrap .mmf-toast{animation:mmf-toast-in .18s ease-out}}
 @keyframes mmf-toast-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@media (max-width:782px){.mmf-wrap .mmf-panel .form-table th{display:block;width:auto;padding:12px 0 4px}.mmf-wrap .mmf-panel .form-table td{display:block;width:auto;padding:0 0 12px}}
+@media (max-width:900px){.mmf-wrap .mmf-bool{display:flex;flex-direction:column;align-items:flex-start;gap:4px}}
 CSS;
 	}
 
@@ -1401,6 +1504,7 @@ CSS;
 			array( 'fg' => '--mmf-popover-fg', 'bg' => '--mmf-popover-bg', 'label' => 'popover' ),
 			array( 'fg' => '--mmf-popover-muted', 'bg' => '--mmf-popover-bg', 'label' => 'popover note' ),
 			array( 'fg' => '--mmf-badge-fg', 'bg' => '--mmf-badge-bg', 'label' => 'recommended badge' ),
+			array( 'fg' => '--mmf-warn-fg', 'bg' => '--mmf-warn-bg', 'label' => 'recommendation warning' ),
 		);
 	}
 
