@@ -240,6 +240,10 @@ final class MMF_Frontend {
 			$assets   = MMF_Assets::rewrite( $html, $settings );
 			$html_out = (string) ( $assets['html'] ?? $html );
 
+			if ( ! empty( $settings['lazy_media'] ) ) {
+				$html_out = MMF_Assets::lazy_media( $html_out );
+			}
+
 			if ( ! empty( $settings['minify_html'] ) ) {
 				$html_out = MMF_HTML::minify( $html_out );
 			}

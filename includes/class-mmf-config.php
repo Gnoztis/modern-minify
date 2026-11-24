@@ -333,6 +333,12 @@ final class MMF_Config {
 				'min'     => 60,
 				'max'     => 95,
 			),
+			// Browsers can defer off-screen media on their own: the attribute is
+			// what MDN recommends instead of any script.
+			'lazy_media'             => array(
+				'type'    => 'bool',
+				'default' => true,
+			),
 			'image_png_lossless'     => array(
 				'type'    => 'bool',
 				'default' => true,
