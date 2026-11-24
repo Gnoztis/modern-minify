@@ -1019,15 +1019,15 @@ final class MMF_Assets {
 	}
 
 	/**
-	 * Turns a tag into a loader placeholder.
+	 * Turns a tag into a deferred one.
 	 *
-	 * The `src` is moved to `data-mmf-src` and the type becomes `text/plain`, so
-	 * the browser neither loads nor executes anything. `async` and `defer` are
-	 * dropped: the loader decides when the file runs.
+	 * The defer attribute is the browser's own mechanism: the file is fetched
+	 * while the document parses and executed afterwards, and the order of
+	 * deferred scripts is preserved by specification.
 	 *
 	 * @param string $tag Full tag.
 	 */
-		private static function delay_tag( string $tag ): string {
+	private static function delay_tag( string $tag ): string {
 		// The browser's own defer: order is kept, execution waits for the parse,
 		// and no loader of ours is involved. The previous placeholder plus loader
 		// broke execution order and could not be read from the page source.
