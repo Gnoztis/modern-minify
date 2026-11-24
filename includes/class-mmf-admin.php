@@ -91,6 +91,7 @@ final class MMF_Admin {
 		add_action( 'wp_ajax_mmf_webp_pause', array( __CLASS__, 'ajax_webp_pause' ) );
 		add_action( 'wp_ajax_mmf_webp_resume', array( __CLASS__, 'ajax_webp_resume' ) );
 		add_action( 'wp_ajax_mmf_webp_stop', array( __CLASS__, 'ajax_webp_stop' ) );
+		add_action( 'wp_ajax_mmf_analyse', array( __CLASS__, 'ajax_analyse' ) );
 	}
 
 	/**
@@ -2748,6 +2749,99 @@ final class MMF_Admin {
 	}
 
 	/**
+	 * AJAX: reads the home page and records what it actually loads.
+	 *
+	 * The advisor used to rely on the last page our pipeline had processed. On a
+	 * cached site that page can be days old, and with the rocket mode on the
+	 * recorded list came out empty — the screen said "данных пока нет" while the
+	 * site was loading plenty. Asking for the page here works in both cases.
+	 */
+	public static function ajax_analyse(): void {
+		check_ajax_referer( 'mmf_analyse', 'nonce' );
+
+		if ( ! current_user_can( self::CAPABILITY ) ) {
+			wp_send_json_error( array( 'message' => __( 'Недостаточно прав.', 'modern-minify' ) ) );
+		}
+
+		$url = add_query_arg( 'mmf_analyse', time(), home_url( '/' ) );
+		$res = wp_remote_get( $url, array( 'timeout' => 10, 'redirection' => 3 ) );
+
+		if ( is_wp_error( $res ) || 200 !== (int) wp_remote_retrieve_response_code( $res ) ) {
+			wp_send_json_error( array( 'message' => __( 'Не удалось получить страницу сайта.', 'modern-minify' ) ) );
+		}
+
+		$html = (string) wp_remote_retrieve_body( $res );
+
+		if ( '' === $html ) {
+			wp_send_json_error( array( 'message' => __( 'Страница вернула пустой ответ.', 'modern-minify' ) ) );
+		}
+
+		$list     = array();
+		$position = 0;
+
+		foreach ( MMF_HTML::tokenize( $html ) as $token ) {
+			if ( 'tag' !== ( $token['type'] ?? '' ) || ! empty( $token['closing'] ) ) {
+				continue;
+			}
+
+			$name = strtolower( (string) ( $token['name'] ?? '' ) );
+
+			if ( ! in_array( $name, array( 'script', 'link' ), true ) ) {
+				continue;
+			}
+
+			$raw   = (string) ( $token['raw'] ?? '' );
+			$attrs = MMF_Assets::attributes( $raw );
+			$kind  = 'script' === $name ? 'js' : 'css';
+
+			if ( 'css' === $kind && false === strpos( strtolower( (string) ( $attrs['rel'] ?? '' ) ), 'stylesheet' ) ) {
+				continue;
+			}
+
+			$mode = 'normal';
+			$src  = 'css' === $kind ? (string) ( $attrs['href'] ?? '' ) : (string) ( $attrs['src'] ?? '' );
+
+			if ( isset( $attrs['data-mmf-rsrc'] ) ) {
+				$src  = (string) $attrs['data-mmf-rsrc'];
+				$mode = 'rocket';
+			}
+
+			if ( '' === $src ) {
+				continue;
+			}
+
+			$size = 0;
+			$path = MMF_Assets::resolve_path( $src, $kind );
+
+			if ( '' !== $path && is_file( $path ) ) {
+				$size = (int) filesize( $path );
+			}
+
+			$position++;
+
+			$list[] = array(
+				'kind'     => $kind,
+				'url'      => $src,
+				'name'     => basename( (string) wp_parse_url( $src, PHP_URL_PATH ) ),
+				'mode'     => $mode,
+				'module'   => false,
+				'size'     => $size,
+				'media'    => (string) ( $attrs['media'] ?? '' ),
+				'position' => $position,
+			);
+
+			if ( count( $list ) >= 200 ) {
+				break;
+			}
+		}
+
+		MMF_Stats::record( array( 'last_resources' => $list ) );
+		MMF_Stats::record_action( sprintf( /* translators: %d: number of resources. */ __( 'Страница проанализирована: найдено ресурсов — %d.', 'modern-minify' ), count( $list ) ) );
+
+		wp_send_json_success( array( 'count' => count( $list ) ) );
+	}
+
+	/**
 	 * Prints the read-only advice block on the JavaScript tab.
 	 */
 	private static function render_advisor(): void {
@@ -2780,6 +2874,14 @@ final class MMF_Admin {
 			echo '</section>';
 
 			return;
+		}
+
+		if ( current_user_can( self::CAPABILITY ) ) {
+			printf(
+				'<p class="mmf-actions"><button type="button" class="button" id="mmf-analyse" data-nonce="%s">%s</button></p>',
+				esc_attr( wp_create_nonce( 'mmf_analyse' ) ),
+				esc_html__( 'Проанализировать страницу', 'modern-minify' )
+			);
 		}
 
 		echo '<p class="mmf-advisor__summary">';
@@ -3302,6 +3404,22 @@ window.addEventListener("popstate",function(){
   var m=/[?&]tab=([a-z]+)/.exec(window.location.search);
   if(m&&m[1]){showTab(m[1],false);}
 });
+var analyseButton=document.getElementById("mmf-analyse");
+if(analyseButton){analyseButton.addEventListener("click",function(){
+  var self=this;var label=self.textContent;
+  self.disabled=true;self.textContent="Анализирую…";
+  var body=new URLSearchParams();
+  body.append("action","mmf_analyse");
+  body.append("nonce",self.getAttribute("data-nonce"));
+  fetch(window.ajaxurl,{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:body.toString()})
+    .then(function(r){return r.json()})
+    .then(function(json){
+      if(json&&json.success){window.location.reload();return}
+      self.disabled=false;self.textContent=label;
+      window.alert(json&&json.data&&json.data.message?json.data.message:"Не удалось проанализировать страницу.");
+    })
+    .catch(function(){self.disabled=false;self.textContent=label;window.alert("Нет связи с сервером.");});
+});}
 var exampleButtons=document.querySelectorAll(".mmf-examples-toggle");
 for(var ei=0;ei<exampleButtons.length;ei++){exampleButtons[ei].addEventListener("click",function(){var box=document.getElementById(this.getAttribute("aria-controls"));if(!box){return}var open=!box.hidden;box.hidden=open;this.setAttribute("aria-expanded",open?"false":"true");});}
 var avatarsButton=document.querySelector(".mmf-convert-avatars");
