@@ -2763,7 +2763,11 @@ final class MMF_Admin {
 			$blocked = in_array( $reason, array( 'jquery', 'module', 'third-party-critical' ), true );
 
 			if ( MMF_Advisor::CAN === $verdict || $risky ) {
-				$pattern = $risky ? '*' . basename( (string) wp_parse_url( (string) $item['url'], PHP_URL_PATH ) ) . '*' : (string) $item['pattern'];
+				// The full path, not the file name: `*scripts.min.js*` matches three
+// different plugins plus the theme, and our own guard refuses it — the
+// advisor must never offer a pattern it will reject one step later.
+				$risky_path = (string) wp_parse_url( (string) $item['url'], PHP_URL_PATH );
+				$pattern    = $risky ? ( '' !== $risky_path ? '*' . $risky_path . '*' : '' ) : (string) $item['pattern'];
 
 				echo '<label class="mmf-bool mmf-advisor-action"><input type="checkbox" class="mmf-advice-pattern' . ( $risky ? ' mmf-advice-risky' : '' ) . '" name="mmf_advice_patterns[]" value="' . esc_attr( $pattern ) . '" checked="checked" title="' . esc_attr( $pattern ) . '" /> <span class="mmf-bool__text">' . esc_html__( 'Отложить', 'modern-minify' ) . '</span></label>';
 			} elseif ( $blocked ) {
