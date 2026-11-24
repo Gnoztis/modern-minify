@@ -1,0 +1,569 @@
+<?php
+/**
+ * Settings screen: Настройки → Modern Minify.
+ *
+ * One page with tabs, no top-level menu. Every field of `MMF_Config::fields()`
+ * is printed exactly once, the whole form is submitted at once (the inactive
+ * tabs are hidden with `display:none`, not removed), and the Settings API
+ * sanitises it through `MMF_Config::sanitize()`.
+ *
+ * The screen's own CSS and JavaScript are inline and are attached only on this
+ * screen (`admin_enqueue_scripts` checks the hook suffix first), so no other
+ * admin page pays for them.
+ *
+ * @package ModernMinify
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+if ( class_exists( 'MMF_Admin' ) ) {
+	return;
+}
+
+/**
+ * Renders the settings screen and handles its actions.
+ */
+final class MMF_Admin {
+
+	/**
+	 * Page slug, also the value of `?page=`.
+	 */
+	public const PAGE = 'modern-minify';
+
+	/**
+	 * Capability required for the screen and for the cache reset.
+	 */
+	public const CAPABILITY = 'manage_options';
+
+	/**
+	 * Nonce action of the cache reset.
+	 */
+	private const RESET_NONCE = 'mmf_reset_cache';
+
+	/**
+	 * Attaches the screen.
+	 */
+	public static function register_hooks(): void {
+		add_action( 'admin_menu', array( __CLASS__, 'register_page' ) );
+		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue' ) );
+		add_action( 'admin_init', array( __CLASS__, 'handle_reset' ) );
+	}
+
+	/**
+	 * Adds the page under Settings.
+	 */
+	public static function register_page(): void {
+		add_options_page(
+			__( 'Modern Minify', 'modern-minify' ),
+			__( 'Modern Minify', 'modern-minify' ),
+			self::CAPABILITY,
+			self::PAGE,
+			array( __CLASS__, 'render' )
+		);
+	}
+
+	/**
+	 * Attaches the screen's inline CSS and JavaScript - on this screen only.
+	 *
+	 * @param string $hook_suffix Screen hook.
+	 */
+	public static function enqueue( $hook_suffix ): void {
+		if ( 'settings_page_' . self::PAGE !== $hook_suffix ) {
+			return;
+		}
+
+		wp_register_style( 'mmf-admin', false, array(), MMF_VERSION );
+		wp_enqueue_style( 'mmf-admin' );
+		wp_add_inline_style( 'mmf-admin', self::inline_css() );
+
+		wp_register_script( 'mmf-admin', false, array(), MMF_VERSION, true );
+		wp_enqueue_script( 'mmf-admin' );
+		wp_add_inline_script( 'mmf-admin', self::inline_js() );
+	}
+
+	/**
+	 * Handles the cache reset link.
+	 *
+	 * A GET request with a nonce: the action deletes regenerable files, so a
+	 * form of its own would only add a nested form to the settings page.
+	 */
+	public static function handle_reset(): void {
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( (string) $_GET['page'] ) ) : '';
+
+		if ( self::PAGE !== $page ) {
+			return;
+		}
+
+		$action = isset( $_GET['action'] ) ? sanitize_key( wp_unslash( (string) $_GET['action'] ) ) : '';
+
+		if ( 'mmf_reset_cache' !== $action ) {
+			return;
+		}
+
+		if ( ! current_user_can( self::CAPABILITY ) ) {
+			return;
+		}
+
+		check_admin_referer( self::RESET_NONCE );
+
+		$deleted = MMF_Cache::delete_all();
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'      => self::PAGE,
+					'mmf-reset' => $deleted,
+				),
+				admin_url( 'options-general.php' )
+			)
+		);
+		exit;
+	}
+
+	/**
+	 * Prints the screen.
+	 */
+	public static function render(): void {
+		if ( ! current_user_can( self::CAPABILITY ) ) {
+			wp_die( esc_html__( 'Недостаточно прав для этой страницы.', 'modern-minify' ) );
+		}
+
+		$tab = self::current_tab();
+
+		echo '<div class="wrap mmf-wrap">';
+		echo '<h1>' . esc_html__( 'Modern Minify', 'modern-minify' ) . '</h1>';
+
+		self::render_notices();
+
+		echo '<nav class="nav-tab-wrapper mmf-tabs">';
+
+		foreach ( self::tabs() as $slug => $label ) {
+			printf(
+				'<a href="%s" class="nav-tab%s">%s</a>',
+				esc_url( self::tab_url( (string) $slug ) ),
+				$slug === $tab ? ' nav-tab-active' : '',
+				esc_html( (string) $label )
+			);
+		}
+
+		echo '</nav>';
+
+		echo '<form method="post" action="' . esc_url( admin_url( 'options.php' ) ) . '">';
+		settings_fields( 'mmf' );
+
+		foreach ( self::tab_fields() as $slug => $fields ) {
+			printf(
+				'<div class="mmf-panel" id="mmf-panel-%s"%s>',
+				esc_attr( (string) $slug ),
+				$slug === $tab ? '' : ' style="display:none"'
+			);
+
+			if ( 'status' === $slug ) {
+				self::render_status();
+			}
+
+			self::render_merge_warning( (string) $slug );
+
+			echo '<table class="form-table" role="presentation"><tbody>';
+
+			foreach ( $fields as $key ) {
+				self::render_field( (string) $key );
+			}
+
+			echo '</tbody></table>';
+			echo '</div>';
+		}
+
+		submit_button();
+		echo '</form>';
+
+		if ( 'advanced' === $tab ) {
+			self::render_cache_path();
+		}
+
+		echo '</div>';
+	}
+
+	/**
+	 * Tabs of the screen.
+	 *
+	 * @return array<string,string>
+	 */
+	public static function tabs(): array {
+		return array(
+			'status'     => __( 'Статус', 'modern-minify' ),
+			'javascript' => __( 'JavaScript', 'modern-minify' ),
+			'css'        => __( 'CSS', 'modern-minify' ),
+			'fonts'      => __( 'Шрифты', 'modern-minify' ),
+			'settings'   => __( 'Настройки', 'modern-minify' ),
+			'advanced'   => __( 'Дополнительно', 'modern-minify' ),
+		);
+	}
+
+	/**
+	 * Which settings belong to which tab.
+	 *
+	 * Every field of the configuration appears here exactly once; a fixture
+	 * checks that, so a new setting cannot be added without a place to edit it.
+	 *
+	 * @return array<string,string[]>
+	 */
+	public static function tab_fields(): array {
+		return array(
+			'status'     => array( 'enabled' ),
+			'javascript' => array( 'minify_js', 'merge_js', 'async_js', 'defer_js', 'defer_skip', 'exclude_js', 'move_scripts_to_footer' ),
+			'css'        => array( 'minify_css', 'merge_css', 'inline_css', 'inline_css_limit', 'remove_print_css', 'exclude_css' ),
+			'fonts'      => array( 'fonts_method', 'fawesome_method' ),
+			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_meta', 'remove_emoji' ),
+			'advanced'   => array( 'cache_ttl', 'test_mode', 'debug' ),
+		);
+	}
+
+	/**
+	 * Label and description of every field.
+	 *
+	 * @return array<string,array{0:string,1:string}>
+	 */
+	public static function field_meta(): array {
+		return array(
+			'enabled'                => array(
+				__( 'Оптимизация включена', 'modern-minify' ),
+				__( 'Выключенный плагин не трогает ни одной страницы.', 'modern-minify' ),
+			),
+			'minify_js'              => array(
+				__( 'Минифицировать JavaScript', 'modern-minify' ),
+				__( 'Локальные файлы сжимаются в кеш, адрес в теге заменяется.', 'modern-minify' ),
+			),
+			'merge_js'               => array(
+				__( 'Объединять JS-файлы', 'modern-minify' ),
+				__( 'Объединение в этом выпуске не выполняется: настройка сохранена для следующего.', 'modern-minify' ),
+			),
+			'async_js'               => array(
+				__( 'Шаблоны для async', 'modern-minify' ),
+				__( 'По одному шаблону на строку. Символ * означает любое количество символов.', 'modern-minify' ),
+			),
+			'defer_js'               => array(
+				__( 'Откладывать все скрипты (defer)', 'modern-minify' ),
+				__( 'Кроме уже async, файлов jquery и списка «не откладывать».', 'modern-minify' ),
+			),
+			'defer_skip'             => array(
+				__( 'Не откладывать', 'modern-minify' ),
+				__( 'Эти файлы минифицируются, но остаются в потоке страницы.', 'modern-minify' ),
+			),
+			'exclude_js'             => array(
+				__( 'Исключения JavaScript', 'modern-minify' ),
+				__( 'Эти файлы не обрабатываются вовсе: ни минификации, ни async/defer.', 'modern-minify' ),
+			),
+			'move_scripts_to_footer' => array(
+				__( 'Перенести скрипты в подвал', 'modern-minify' ),
+				__( 'Локальные скрипты из head переезжают в конец body с сохранением порядка.', 'modern-minify' ),
+			),
+			'minify_css'             => array(
+				__( 'Минифицировать CSS', 'modern-minify' ),
+				__( 'Локальные файлы сжимаются в кеш, адрес в теге заменяется.', 'modern-minify' ),
+			),
+			'merge_css'              => array(
+				__( 'Объединять CSS-файлы', 'modern-minify' ),
+				__( 'Объединение в этом выпуске не выполняется: настройка сохранена для следующего.', 'modern-minify' ),
+			),
+			'inline_css'             => array(
+				__( 'Встраивать небольшие CSS', 'modern-minify' ),
+				__( 'Файл меньше порога заменяется на style прямо в странице.', 'modern-minify' ),
+			),
+			'inline_css_limit'       => array(
+				__( 'Порог встраивания, КиБ', 'modern-minify' ),
+				__( '0 отключает встраивание, даже если переключатель включён.', 'modern-minify' ),
+			),
+			'remove_print_css'       => array(
+				__( 'Удалять print-стили', 'modern-minify' ),
+				__( 'Убирает ссылки со media="print".', 'modern-minify' ),
+			),
+			'exclude_css'            => array(
+				__( 'Исключения CSS', 'modern-minify' ),
+				__( 'Эти файлы не обрабатываются вовсе.', 'modern-minify' ),
+			),
+			'fonts_method'           => array(
+				__( 'Google Fonts', 'modern-minify' ),
+				__( 'Локальное размещение скачивает CSS и файлы шрифтов в кеш; при ошибке ссылка остаётся исходной.', 'modern-minify' ),
+			),
+			'fawesome_method'        => array(
+				__( 'Font Awesome', 'modern-minify' ),
+				__( 'Встроить CSS в страницу; адреса шрифтов остаются абсолютными.', 'modern-minify' ),
+			),
+			'minify_html'            => array(
+				__( 'Минифицировать HTML', 'modern-minify' ),
+				__( 'Убирает комментарии и пробелы между блоками; защищённые блоки не трогает.', 'modern-minify' ),
+			),
+			'minify_inline'          => array(
+				__( 'Минифицировать инлайн-блоки', 'modern-minify' ),
+				__( 'Содержимое script и style прямо в странице. Отключается отдельно: ломается чаще всего именно оно.', 'modern-minify' ),
+			),
+			'disable_when_logged_in' => array(
+				__( 'Не оптимизировать авторизованных', 'modern-minify' ),
+				__( 'Страницы пользователей, которые вошли на сайт, остаются исходными.', 'modern-minify' ),
+			),
+			'remove_meta'            => array(
+				__( 'Убирать лишние meta-теги', 'modern-minify' ),
+				__( 'Генератор и подобные теги; появится в версии 0.4.1.', 'modern-minify' ),
+			),
+			'remove_emoji'           => array(
+				__( 'Убирать emoji-скрипты', 'modern-minify' ),
+				__( 'Скрипты ядра для emoji; появится в версии 0.4.1.', 'modern-minify' ),
+			),
+			'cache_ttl'              => array(
+				__( 'Срок жизни кеша, дней', 'modern-minify' ),
+				__( '0 — хранить до ручной очистки.', 'modern-minify' ),
+			),
+			'test_mode'              => array(
+				__( 'Тестовый режим', 'modern-minify' ),
+				__( 'Оптимизация только для администраторов: посетители видят исходную страницу.', 'modern-minify' ),
+			),
+			'debug'                  => array(
+				__( 'Режим отладки', 'modern-minify' ),
+				__( 'Подробности на этом экране; записей в лог нет.', 'modern-minify' ),
+			),
+		);
+	}
+
+	/**
+	 * Human labels of the choice values.
+	 *
+	 * @return array<string,array<string,string>>
+	 */
+	private static function choice_labels(): array {
+		return array(
+			'fonts_method'    => array(
+				'off'   => __( 'Не обрабатывать', 'modern-minify' ),
+				'swap'  => __( 'Добавить display=swap', 'modern-minify' ),
+				'local' => __( 'Скачать и отдать локально', 'modern-minify' ),
+			),
+			'fawesome_method' => array(
+				'off'    => __( 'Оставить как есть', 'modern-minify' ),
+				'inline' => __( 'Встроить CSS в страницу', 'modern-minify' ),
+			),
+		);
+	}
+
+	/**
+	 * Current tab slug, validated against the tab list.
+	 */
+	private static function current_tab(): string {
+		$tab  = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( (string) $_GET['tab'] ) ) : '';
+		$tabs = self::tabs();
+
+		return isset( $tabs[ $tab ] ) ? $tab : 'status';
+	}
+
+	/**
+	 * URL of a tab.
+	 *
+	 * @param string $slug Tab slug.
+	 */
+	private static function tab_url( string $slug ): string {
+		return add_query_arg(
+			array(
+				'page' => self::PAGE,
+				'tab'  => $slug,
+			),
+			admin_url( 'options-general.php' )
+		);
+	}
+
+	/**
+	 * Prints one field.
+	 *
+	 * @param string $key Setting name.
+	 */
+	private static function render_field( string $key ): void {
+		$fields = MMF_Config::fields();
+		$meta   = self::field_meta();
+
+		if ( ! isset( $fields[ $key ] ) ) {
+			return;
+		}
+
+		$field = $fields[ $key ];
+		$label = isset( $meta[ $key ][0] ) ? (string) $meta[ $key ][0] : $key;
+		$help  = isset( $meta[ $key ][1] ) ? (string) $meta[ $key ][1] : '';
+		$id    = 'mmf-' . $key;
+		$name  = 'mmf_settings[' . $key . ']';
+		$value = MMF_Config::get( $key );
+		$type  = (string) ( $field['type'] ?? 'bool' );
+
+		echo '<tr><th scope="row">';
+		echo '<label for="' . esc_attr( $id ) . '">' . esc_html( $label ) . '</label>';
+		echo '</th><td>';
+
+		if ( 'bool' === $type ) {
+			// A hidden zero makes "unchecked" post a value: otherwise the key is
+			// absent from the request and the sanitiser would restore the default.
+			echo '<input type="hidden" name="' . esc_attr( $name ) . '" value="0" />';
+			echo '<input type="checkbox" id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" value="1"' . ( $value ? ' checked="checked"' : '' ) . ' />';
+		} elseif ( 'list' === $type ) {
+			$lines = is_array( $value ) ? implode( "\n", array_map( 'strval', $value ) ) : '';
+			echo '<textarea id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" rows="5" class="large-text code">' . esc_textarea( $lines ) . '</textarea>';
+		} elseif ( 'int' === $type ) {
+			printf(
+				'<input type="number" id="%s" name="%s" value="%d" min="%d" max="%d" class="small-text" />',
+				esc_attr( $id ),
+				esc_attr( $name ),
+				(int) $value,
+				(int) $field['min'],
+				(int) $field['max']
+			);
+		} else {
+			$labels = self::choice_labels();
+
+			echo '<select id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '">';
+
+			foreach ( (array) $field['choices'] as $choice ) {
+				printf(
+					'<option value="%s"%s>%s</option>',
+					esc_attr( (string) $choice ),
+					(string) $choice === (string) $value ? ' selected="selected"' : '',
+					esc_html( (string) ( $labels[ $key ][ $choice ] ?? $choice ) )
+				);
+			}
+
+			echo '</select>';
+		}
+
+		if ( '' !== $help ) {
+			echo '<p class="description">' . esc_html( $help ) . '</p>';
+		}
+
+		echo '</td></tr>';
+	}
+
+	/**
+	 * Prints the status panel: counters, cache state and the reset link.
+	 */
+	private static function render_status(): void {
+		$stats = MMF_Stats::all();
+		$cache = MMF_Cache::stats();
+
+		echo '<h2>' . esc_html__( 'Состояние', 'modern-minify' ) . '</h2>';
+		echo '<p class="mmf-status ' . ( MMF_Config::is_enabled() ? 'mmf-status--on' : 'mmf-status--off' ) . '">';
+		echo MMF_Config::is_enabled() ? esc_html__( 'оптимизация включена', 'modern-minify' ) : esc_html__( 'оптимизация выключена', 'modern-minify' );
+		echo '</p>';
+
+		echo '<table class="widefat striped mmf-status-table"><tbody>';
+
+		$rows = array(
+			__( 'Страниц обработано', 'modern-minify' )   => (string) (int) $stats['pages'],
+			__( 'Файлов минифицировано', 'modern-minify' ) => (string) (int) $stats['files'],
+			__( 'Инлайн-блоков сжато', 'modern-minify' )   => (string) (int) $stats['inline'],
+			__( 'Скриптов отложено', 'modern-minify' )     => (string) (int) $stats['defer'],
+			__( 'Скриптов async', 'modern-minify' )        => (string) (int) $stats['async'],
+			__( 'Скриптов перенесено в подвал', 'modern-minify' ) => (string) (int) $stats['moved'],
+			__( 'Ошибок обработки', 'modern-minify' )      => (string) (int) $stats['failed'],
+			__( 'Файлов в кеше', 'modern-minify' )         => (string) (int) $cache['files'],
+			__( 'Размер кеша', 'modern-minify' )           => size_format( (int) $cache['size'] ),
+			__( 'Кеш обновлён', 'modern-minify' )          => $cache['updated'] > 0 ? (string) wp_date( 'Y-m-d H:i:s', (int) $cache['updated'] ) : __( 'ещё не было', 'modern-minify' ),
+		);
+
+		foreach ( $rows as $label => $number ) {
+			echo '<tr><td>' . esc_html( (string) $label ) . '</td><td>' . esc_html( $number ) . '</td></tr>';
+		}
+
+		echo '</tbody></table>';
+
+		printf(
+			'<p class="description">%s %s</p>',
+			esc_html__( 'Счётчики накопительные и записываются не чаще раза в минуту.', 'modern-minify' ),
+			esc_html__( 'Кеш можно очистить в любой момент.', 'modern-minify' )
+		);
+
+		$reset_url = wp_nonce_url(
+			add_query_arg(
+				array(
+					'page'   => self::PAGE,
+					'action' => 'mmf_reset_cache',
+				),
+				admin_url( 'options-general.php' )
+			),
+			self::RESET_NONCE
+		);
+
+		echo '<p class="mmf-actions"><a class="button mmf-reset" href="' . esc_url( $reset_url ) . '">' . esc_html__( 'Сбросить кеш', 'modern-minify' ) . '</a></p>';
+	}
+
+	/**
+	 * Prints the cache path on the advanced tab.
+	 */
+	private static function render_cache_path(): void {
+		$cache = MMF_Cache::stats();
+
+		echo '<h2>' . esc_html__( 'Кеш на диске', 'modern-minify' ) . '</h2>';
+		echo '<table class="widefat striped"><tbody>';
+		echo '<tr><td>' . esc_html__( 'Каталог', 'modern-minify' ) . '</td><td><code>' . esc_html( (string) $cache['dir'] ) . '</code></td></tr>';
+		echo '<tr><td>' . esc_html__( 'URL', 'modern-minify' ) . '</td><td><code>' . esc_html( (string) $cache['url'] ) . '</code></td></tr>';
+		echo '<tr><td>' . esc_html__( 'Доступен для записи', 'modern-minify' ) . '</td><td>' . ( $cache['writable'] ? esc_html__( 'да', 'modern-minify' ) : esc_html__( 'нет', 'modern-minify' ) ) . '</td></tr>';
+		echo '</tbody></table>';
+	}
+
+	/**
+	 * Prints the plugin's notices above the form.
+	 */
+	private static function render_notices(): void {
+		if ( isset( $_GET['settings-updated'] ) ) {
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Настройки сохранены. Кеш очищен, файлы будут собраны заново.', 'modern-minify' ) . '</p></div>';
+		}
+
+		if ( isset( $_GET['mmf-reset'] ) ) {
+			$deleted = (int) sanitize_text_field( wp_unslash( (string) $_GET['mmf-reset'] ) );
+
+			/* translators: %d: number of deleted files. */
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html( sprintf( __( 'Кеш очищен, удалено файлов: %d.', 'modern-minify' ), $deleted ) ) . '</p></div>';
+		}
+
+		if ( MMF_Conflicts::is_active() ) {
+			echo '<div class="notice notice-error"><p>' . esc_html( MMF_Notices::conflict_message() ) . '</p></div>';
+		}
+
+		if ( MMF_Config::get( 'test_mode' ) ) {
+			echo '<div class="notice notice-info"><p>' . esc_html__( 'Тестовый режим: оптимизация применяется только к администраторам, посетители видят исходную страницу.', 'modern-minify' ) . '</p></div>';
+		}
+	}
+
+	/**
+	 * Prints the HTTP/2 warning on the tabs where combining can be enabled.
+	 *
+	 * @param string $slug Tab slug.
+	 */
+	private static function render_merge_warning( string $slug ): void {
+		if ( 'javascript' === $slug && MMF_Config::get( 'merge_js' ) ) {
+			echo '<div class="notice notice-warning inline"><p>' . esc_html( MMF_Notices::merge_warning() ) . '</p></div>';
+		}
+
+		if ( 'css' === $slug && MMF_Config::get( 'merge_css' ) ) {
+			echo '<div class="notice notice-warning inline"><p>' . esc_html( MMF_Notices::merge_warning() ) . '</p></div>';
+		}
+	}
+
+	/**
+	 * Styles of the screen: inline, this screen only.
+	 */
+	private static function inline_css(): string {
+		return '.mmf-wrap .mmf-tabs{margin-bottom:16px}'
+			. '.mmf-wrap .mmf-panel .form-table th{width:260px}'
+			. '.mmf-wrap .mmf-status{display:inline-block;padding:3px 10px;border-radius:3px;background:#f0f0f1}'
+			. '.mmf-wrap .mmf-status--on{background:#edfaef;color:#0a6b1f}'
+			. '.mmf-wrap .mmf-status--off{background:#fcf0f1;color:#8a1111}'
+			. '.mmf-wrap .mmf-status-table{margin:12px 0;max-width:640px}'
+			. '.mmf-wrap .mmf-actions{margin-top:16px}';
+	}
+
+	/**
+	 * The one behaviour the screen needs: confirm before wiping the cache.
+	 */
+	private static function inline_js(): string {
+		$prompt = (string) wp_json_encode( __( 'Очистить весь кеш минифицированных файлов, шрифтов и стилей?', 'modern-minify' ) );
+
+		return '(function(){var links=document.querySelectorAll(".mmf-reset");'
+			. 'for(var i=0;i<links.length;i++){links[i].addEventListener("click",function(event){'
+			. 'if(!window.confirm(' . $prompt . ')){event.preventDefault();}});}})();';
+	}
+}

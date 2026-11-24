@@ -37,9 +37,13 @@ final class MMF_Conflicts {
 	public const FILTER = 'mmf_conflicting_plugins';
 
 	/**
-	 * Plugins whose job is minification or whose optimisation bundle includes
-	 * it. Only the directory slug is matched: a site can rename the folder, and
-	 * then the generic token below is the fallback.
+	 * Compatibility table of plugins that minify the page themselves.
+	 *
+	 * This is a technical list, not attribution: it exists only so that a site
+	 * running two minifiers is not silently broken by double minification. The
+	 * slugs are matched against active plugin directories. Nothing in this list
+	 * reaches the interface - the notice text is deliberately generic and names
+	 * no other plugin.
 	 */
 	private const KNOWN = array(
 		'autoptimize',

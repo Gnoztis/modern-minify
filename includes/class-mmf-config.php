@@ -35,8 +35,12 @@ final class MMF_Config {
 	 * Bumped when a key changes meaning and the stored value has to be migrated
 	 * rather than coerced; `prepare()` always writes the current number, so the
 	 * stored array tells which rules produced it.
+	 *
+	 * 3: the font method vocabulary changed (`inherit`/`inline`/`async`/`exclude`
+	 *    became `off`/`swap`/`local`); an unknown value falls back to `off`,
+	 *    which is the safe direction - nothing is touched.
 	 */
-	public const SCHEMA = 2;
+	public const SCHEMA = 3;
 
 	/**
 	 * Upper bound of one exclusion list, in entries.
@@ -151,22 +155,33 @@ final class MMF_Config {
 				'type'    => 'bool',
 				'default' => false,
 			),
-			// Fonts (stage 3): how a Google Fonts / Font Awesome request is
-			// treated. `inherit` keeps the tag as the theme printed it.
-			'fonts_method'           => array(
-				'type'    => 'choice',
-				'default' => 'inherit',
-				'choices' => array( 'inherit', 'inline', 'async', 'exclude' ),
-			),
-			'fonts_swap'             => array(
+			// Inline blocks: minifying `<script>` and `<style>` bodies. An
+			// individual switch because this is the change that breaks themes most
+			// often, so it must be possible to keep the file pipeline and turn
+			// only this off.
+			'minify_inline'          => array(
 				'type'    => 'bool',
 				'default' => true,
 			),
-			'fonts_local'            => array(
-				'type'    => 'bool',
-				'default' => false,
+			// Fonts: how a Google Fonts request is treated. `off` keeps the tag
+			// as the theme printed it, `swap` only appends display=swap, `local`
+			// downloads the stylesheet and the font files into the cache.
+			'fonts_method'           => array(
+				'type'    => 'choice',
+				'default' => 'off',
+				'choices' => array( 'off', 'swap', 'local' ),
 			),
-			'fonts_disable'          => array(
+			// Font Awesome: `off` keeps the tag, `inline` replaces the stylesheet
+			// link with an inline style block.
+			'fawesome_method'        => array(
+				'type'    => 'choice',
+				'default' => 'off',
+				'choices' => array( 'off', 'inline' ),
+			),
+			// Test mode: the pipeline runs only for administrators, so the site
+			// owner can look at the result on the live site without risking
+			// visitors.
+			'test_mode'              => array(
 				'type'    => 'bool',
 				'default' => false,
 			),

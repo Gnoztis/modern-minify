@@ -179,7 +179,13 @@ final class MMF_Frontend {
 			return false;
 		}
 
-		if ( $this->is_sitemap_request() || $this->emergency_off() ) {
+		if ( $this->is_sitemap_request() || self::emergency_off_requested() ) {
+			return false;
+		}
+
+		// Test mode: the owner sees the optimised page on the live site, a
+		// visitor sees the untouched one.
+		if ( MMF_Config::get( 'test_mode' ) && ! current_user_can( 'manage_options' ) ) {
 			return false;
 		}
 
@@ -308,10 +314,13 @@ final class MMF_Frontend {
 	/**
 	 * The emergency switches of an ordinary page request.
 	 *
-	 * `mmf_no_minify=1` is the documented one; `mmf_off=1` is the short form
-	 * used by the admin-bar link of the next stage.
+	 * `mmf_no_minify=1` is the documented one; `mmf_off=1` is the short form and
+	 * the one the admin-bar link uses.
+	 *
+	 * Public and static because the admin-bar link has to know which state the
+	 * current URL is in.
 	 */
-	private function emergency_off(): bool {
+	public static function emergency_off_requested(): bool {
 		foreach ( array( 'mmf_no_minify', 'mmf_off' ) as $name ) {
 			if ( ! isset( $_GET[ $name ] ) ) {
 				continue;

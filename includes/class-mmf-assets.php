@@ -88,13 +88,17 @@ final class MMF_Assets {
 
 		$minify_js  = ! empty( $settings['minify_js'] );
 		$minify_css = ! empty( $settings['minify_css'] );
+		$fonts      = isset( $settings['fonts_method'] ) && is_string( $settings['fonts_method'] ) ? strtolower( trim( $settings['fonts_method'] ) ) : 'off';
+		$fawesome   = isset( $settings['fawesome_method'] ) && is_string( $settings['fawesome_method'] ) ? strtolower( trim( $settings['fawesome_method'] ) ) : 'off';
 
 		if ( ! $minify_js
 			&& ! $minify_css
 			&& empty( $settings['defer_js'] )
 			&& empty( $settings['async_js'] )
 			&& empty( $settings['remove_print_css'] )
-			&& empty( $settings['move_scripts_to_footer'] ) ) {
+			&& empty( $settings['move_scripts_to_footer'] )
+			&& 'off' === $fonts
+			&& 'off' === $fawesome ) {
 			return array(
 				'html'  => $html,
 				'stats' => $stats,
@@ -135,6 +139,17 @@ final class MMF_Assets {
 			if ( 'link' === $name ) {
 				$result = self::safely(
 					static function () use ( $token, $settings ) {
+						// Font stylesheets are external by design, so they are
+						// handled before the local-file pipeline looks at the tag.
+						$font = MMF_Fonts::rewrite_link( (string) $token['raw'], $settings );
+
+						if ( ! empty( $font['handled'] ) ) {
+							return array(
+								'tag'   => (string) $font['tag'],
+								'stats' => (array) $font['stats'],
+							);
+						}
+
 						return self::process_link( (string) $token['raw'], $settings );
 					},
 					array(
@@ -277,7 +292,10 @@ final class MMF_Assets {
 		$src = isset( $attributes['src'] ) ? (string) $attributes['src'] : '';
 
 		if ( '' === $src ) {
-			if ( ! empty( $settings['minify_js'] ) && self::is_js_type( $type ) && '' !== trim( $content ) ) {
+			if ( ! empty( $settings['minify_js'] )
+				&& ! empty( $settings['minify_inline'] )
+				&& self::is_js_type( $type )
+				&& '' !== trim( $content ) ) {
 				$minified = MMF_Minifier::minify_js( $content );
 
 				if ( '' !== $minified && $minified !== $content ) {
@@ -376,7 +394,7 @@ final class MMF_Assets {
 			'stats'   => array(),
 		);
 
-		if ( empty( $settings['minify_css'] ) || '' === trim( $content ) ) {
+		if ( empty( $settings['minify_css'] ) || empty( $settings['minify_inline'] ) || '' === trim( $content ) ) {
 			return $result;
 		}
 
@@ -877,10 +895,13 @@ final class MMF_Assets {
 	 *
 	 * The first occurrence of a repeated attribute wins, as in HTML.
 	 *
+	 * Public because the font handler rewrites `<link>` tags as well: both
+	 * classes must parse a tag exactly the same way.
+	 *
 	 * @param string $tag Full tag.
 	 * @return array<string,string>
 	 */
-	private static function attributes( string $tag ): array {
+	public static function attributes( string $tag ): array {
 		$attributes = array();
 
 		if ( ! preg_match_all( '/\s([^\s=\/>]+)(?:\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+))?/', $tag, $matches, PREG_SET_ORDER ) ) {
@@ -913,7 +934,7 @@ final class MMF_Assets {
 	 * @param string $name  Attribute name.
 	 * @param string $value New value, unescaped.
 	 */
-	private static function replace_attribute( string $tag, string $name, string $value ): string {
+	public static function replace_attribute( string $tag, string $name, string $value ): string {
 		$quoted = '"' . str_replace( '"', '&quot;', $value ) . '"';
 		$count  = 0;
 
@@ -940,7 +961,7 @@ final class MMF_Assets {
 	 * @param string $tag  Full tag.
 	 * @param string $name Attribute name.
 	 */
-	private static function remove_attribute( string $tag, string $name ): string {
+	public static function remove_attribute( string $tag, string $name ): string {
 		$removed = preg_replace(
 			'/\s+' . preg_quote( $name, '/' ) . '\s*(?:=\s*("[^"]*"|\'[^\']*\'|[^\s>]+))?/i',
 			'',
