@@ -1102,7 +1102,12 @@ final class MMF_Assets {
 			return $result;
 		}
 
-		if ( empty( $settings['minify_css'] ) ) {
+		// The two explicit lists are decisions the owner made about specific
+		// files, so they must not depend on the minification switch.
+		$force_inline = self::matches( $href, $settings['inline_css_extra'] ?? array() );
+		$force_async  = self::matches( $href, $settings['async_css'] ?? array() );
+
+		if ( empty( $settings['minify_css'] ) && ! $force_inline && ! $force_async ) {
 			return $result;
 		}
 
@@ -1129,17 +1134,36 @@ final class MMF_Assets {
 		// Inlining is skipped for a link carrying an id: scripts and plugins use
 		// the id to toggle or replace that exact element. `</style` in the CSS
 		// would end the new element early, so such a file is never inlined.
-		$force_inline = MMF_Assets::matches( (string) ( $attributes['href'] ?? '' ), $settings['inline_css_extra'] ?? array() );
+		$inline_id = isset( $attributes['id'] ) ? ' id="' . esc_attr( (string) $attributes['id'] ) . '"' : '';
 
-		if ( ( $force_inline || ! empty( $settings['inline_css'] ) )
+		// A forced file is inlined even when it carries an id: the id moves onto
+		// the <style> element, so a script that toggles or replaces that exact
+		// element keeps working. Automatic inlining still skips tagged links.
+		if ( ( $force_inline || ( ! empty( $settings['inline_css'] ) && ! isset( $attributes['id'] ) ) )
 			&& ( $force_inline || $limit > 0 )
 			&& strlen( $content ) <= ( $force_inline ? 200000 : $limit )
-			&& ! isset( $attributes['id'] )
 			&& false === stripos( $content, '</style' ) ) {
-			$result['tag'] = '<style' . ( '' !== $media ? ' media="' . esc_attr( $media ) . '"' : '' ) . '>' . $content . '</style>';
+			$result['tag'] = '<style' . $inline_id . ( '' !== $media ? ' media="' . esc_attr( $media ) . '"' : '' ) . '>' . $content . '</style>';
 			$result['stats']['inline'] = 1;
 
 			return $result;
+		}
+
+		// Asynchronous loading was implemented only inside the script branch and
+		// never ran for a <link>: the file stayed blocking no matter what the
+		// owner put into the list. It is wired here, where stylesheets live.
+		if ( $force_async && ! self::matches( $href, $settings['exclude_css'] ?? array() ) ) {
+			$js = 'document.addEventListener("DOMContentLoaded",function(){var l=document.createElement("link");l.rel="stylesheet";l.href=' . wp_json_encode( $href ) . ';document.head.appendChild(l);});';
+			$tag_async = MMF_Loader::script_tag( $js, array( 'id' => 'mmf-async-css-' . substr( md5( $href ), 0, 8 ), 'data-mmf-async-css' => '1' ) );
+
+			if ( '' !== $tag_async && ( ! MMF_Loader::csp_present() || MMF_Loader::tag_has_nonce( $tag_async ) ) ) {
+				$result['tag']            = $tag_async;
+				$result['stats']['async_css'] = 1;
+
+				return $result;
+			}
+
+			$result['stats']['async_blocked'] = 1;
 		}
 
 		$tag = self::replace_attribute( $tag, 'href', (string) $file['url'] );
