@@ -419,6 +419,16 @@ final class MMF_Admin {
 			}
 
 			if ( 'advisor' === $slug ) {
+				// The button sits here, not inside a card: both advisors return early
+				// when there is no data, and this button is the only way to get it.
+				echo '<p class="mmf-actions">';
+				printf(
+					'<button type="button" class="button" id="mmf-analyse" data-nonce="%s">%s</button>',
+					esc_attr( wp_create_nonce( 'mmf_analyse' ) ),
+					esc_html__( 'Проанализировать страницу', 'modern-minify' )
+				);
+				echo '</p>';
+
 				self::render_advisor();
 				self::render_css_advisor();
 			}
@@ -2870,14 +2880,6 @@ final class MMF_Admin {
 			echo '</section>';
 
 			return;
-		}
-
-		if ( current_user_can( self::CAPABILITY ) ) {
-			printf(
-				'<p class="mmf-actions"><button type="button" class="button" id="mmf-analyse" data-nonce="%s">%s</button></p>',
-				esc_attr( wp_create_nonce( 'mmf_analyse' ) ),
-				esc_html__( 'Проанализировать страницу', 'modern-minify' )
-			);
 		}
 
 		echo '<p class="mmf-advisor__summary">';
