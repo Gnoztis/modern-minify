@@ -46,8 +46,10 @@ final class MMF_Config {
 	 *    empty patterns mean nothing is delayed, which is the safe default.
 	 * 6: external files default to `local` (`external_mode`, `external_max_size`,
 	 *    `external_exclude`); a site that wants the old behaviour sets `keep`.
+	 * 7: the whole-page mode arrived (`rocket_mode`, `rocket_exclude`), off by
+	 *    default because it defers every script.
 	 */
-	public const SCHEMA = 6;
+	public const SCHEMA = 7;
 
 	/**
 	 * Upper bound of one exclusion list, in entries.
@@ -178,6 +180,18 @@ final class MMF_Config {
 			),
 			// Extra hosts or URL fragments that must stay external.
 			'external_exclude'       => array(
+				'type'    => 'list',
+				'default' => array(),
+			),
+			// Whole-page mode: every JavaScript tag waits for the document to be
+			// parsed and then runs in document order. Off by default because it
+			// touches every script on the page.
+			'rocket_mode'            => array(
+				'type'    => 'bool',
+				'default' => false,
+			),
+			// Paths and ids that the whole-page mode must leave alone.
+			'rocket_exclude'         => array(
 				'type'    => 'list',
 				'default' => array(),
 			),

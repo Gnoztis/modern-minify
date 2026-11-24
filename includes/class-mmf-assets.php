@@ -94,9 +94,25 @@ final class MMF_Assets {
 		$fawesome   = isset( $settings['fawesome_method'] ) && is_string( $settings['fawesome_method'] ) ? strtolower( trim( $settings['fawesome_method'] ) ) : 'off';
 		$delay      = ! empty( $settings['delay_js'] ) && is_array( $settings['delay_js'] );
 
+		// Whole-page mode: generated first, because a CSP without a nonce must
+		// switch it off before a single placeholder is printed. Placeholders the
+		// loader cannot restore would leave the page without JavaScript.
+		$rocket_js = '';
+
+		if ( ! empty( $settings['rocket_mode'] ) ) {
+			$rocket_js = MMF_Loader::script( MMF_Loader::MODE_DOMREADY, 5000, MMF_Loader::MAX_BYTES_ROCKET );
+
+			if ( '' !== $rocket_js && MMF_Loader::csp_blocked( $rocket_js ) ) {
+				$rocket_js = '';
+			}
+		}
+
+		$rocket = '' !== $rocket_js;
+
 		if ( ! $minify_js
 			&& ! $minify_css
 			&& ! $delay
+			&& ! $rocket
 			&& empty( $settings['defer_js'] )
 			&& empty( $settings['async_js'] )
 			&& empty( $settings['remove_print_css'] )
@@ -114,12 +130,14 @@ final class MMF_Assets {
 		$delay_seconds = is_numeric( $delay_seconds ) ? (float) $delay_seconds : 5.0;
 		$delay_timeout = MMF_Loader::normalize_timeout( (int) ( $delay_seconds * 1000 ) );
 
-		$tokens        = MMF_HTML::tokenize( $html );
-		$count         = count( $tokens );
-		$out           = '';
-		$moved         = array();
-		$in_head       = false;
+		$tokens         = MMF_HTML::tokenize( $html );
+		$count          = count( $tokens );
+		$out            = '';
+		$moved          = array();
+		$in_head        = false;
 		$loader_printed = false;
+		$rocket_used    = false;
+		$rocket_printed = false;
 
 		for ( $index = 0; $index < $count; $index++ ) {
 			$token = $tokens[ $index ];
@@ -134,10 +152,19 @@ final class MMF_Assets {
 				// The moved scripts land in front of the closing body tag. The
 				// position comes from the token stream, not from a string search:
 				// a `</body>` inside a script string must not become the anchor.
-				if ( 'tag' === $token['type'] && $token['closing'] && 'body' === $token['name'] && array() !== $moved ) {
-					$out           .= implode( '', $moved );
-					$stats['moved'] = count( $moved );
-					$moved          = array();
+				if ( 'tag' === $token['type'] && $token['closing'] && 'body' === $token['name'] ) {
+					if ( array() !== $moved ) {
+						$out           .= implode( '', $moved );
+						$stats['moved'] = count( $moved );
+						$moved          = array();
+					}
+
+					// The whole-page loader goes to the end of the body: it runs
+					// after parsing, so it must not sit in front of the page.
+					if ( $rocket_used && ! $rocket_printed ) {
+						$out           .= MMF_Loader::script_tag( $rocket_js );
+						$rocket_printed = true;
+					}
 				}
 
 				$out .= (string) $token['raw'];
@@ -192,9 +219,9 @@ final class MMF_Assets {
 			}
 
 			$result = self::safely(
-				static function () use ( $token, $content, $settings ) {
+				static function () use ( $token, $content, $settings, $rocket ) {
 					return 'script' === $token['name']
-						? self::process_script( (string) $token['raw'], $content, $settings )
+						? self::process_script( (string) $token['raw'], $content, $settings, $rocket )
 						: self::process_style( (string) $token['raw'], $content, $settings );
 				},
 				array(
@@ -203,6 +230,10 @@ final class MMF_Assets {
 					'stats'   => array(),
 				)
 			);
+
+			if ( ! empty( $result['rocket'] ) ) {
+				$rocket_used = true;
+			}
 
 			// A footer move takes the whole element out of the head, so the
 			// content and the closing tag are consumed here as well. The rewrite
@@ -245,6 +276,11 @@ final class MMF_Assets {
 		if ( array() !== $moved ) {
 			$out           .= implode( '', $moved );
 			$stats['moved'] = count( $moved );
+		}
+
+		// Same for a document without a closing body tag.
+		if ( $rocket_used && ! $rocket_printed ) {
+			$out .= MMF_Loader::script_tag( $rocket_js );
 		}
 
 		// The status screen lists the external hosts of the page just rewritten.
@@ -300,7 +336,7 @@ final class MMF_Assets {
 	 * @param array<string,mixed> $settings Plugin settings.
 	 * @return array{tag:string,content:string,stats:array<string,int>}
 	 */
-	private static function process_script( string $tag, string $content, array $settings ): array {
+	private static function process_script( string $tag, string $content, array $settings, bool $rocket = false ): array {
 		$result = array(
 			'tag'     => $tag,
 			'content' => $content,
@@ -311,7 +347,7 @@ final class MMF_Assets {
 		$type       = strtolower( trim( (string) ( $attributes['type'] ?? '' ) ) );
 
 		// Module scripts have their own loading and scoping rules: no rewrite,
-		// no minification, no async/defer.
+		// no minification, no async/defer, no deferral of any kind.
 		if ( self::is_module( $type ) ) {
 			return $result;
 		}
@@ -329,6 +365,14 @@ final class MMF_Assets {
 					$result['content']         = $minified;
 					$result['stats']['inline'] = 1;
 				}
+			}
+
+			// Whole-page mode also covers inline blocks: the loader executes
+			// them in document order between the external files.
+			if ( $rocket && ! self::rocket_skipped( $tag, $content, '', $settings ) && self::is_js_type( $type ) ) {
+				$result['tag']             = self::rocket_tag( $tag, '' );
+				$result['rocket']          = true;
+				$result['stats']['rocket'] = 1;
 			}
 
 			return $result;
@@ -386,6 +430,21 @@ final class MMF_Assets {
 			}
 		}
 
+		// Whole-page mode: every JavaScript tag becomes inert and the loader
+		// restores the queue in document order after parsing. A skipped script
+		// stays exactly as the theme printed it - including no async/defer.
+		if ( $rocket ) {
+			$final_src = (string) ( self::attributes( $tag )['src'] ?? $src );
+
+			if ( ! self::rocket_skipped( $tag, $content, $final_src, $settings ) ) {
+				$result['tag']             = self::rocket_tag( $tag, $final_src );
+				$result['rocket']          = true;
+				$result['stats']['rocket'] = 1;
+			}
+
+			return $result;
+		}
+
 		// Delay JS: the file and its execution wait for the loader. A delayed
 		// script never gets async/defer - the loader owns its timing.
 		if ( self::should_delay( $src, $settings ) ) {
@@ -421,11 +480,82 @@ final class MMF_Assets {
 
 		// Moving is decided here because only this method knows whether the tag
 		// ended up async (an async script is already non-blocking and keeps its
-		// place) and whether it was excluded at all.
-		$result['move'] = ! empty( $settings['move_scripts_to_footer'] )
+		// place) and whether it was excluded at all. The whole-page mode never
+		// moves anything: its whole point is document order.
+		$result['move'] = ! $rocket
+			&& ! empty( $settings['move_scripts_to_footer'] )
 			&& ! self::has_attribute( $tag, 'async' );
 
 		return $result;
+	}
+
+	/**
+	 * Whether the whole-page mode must leave a script alone.
+	 *
+	 * @param string              $tag      Full tag.
+	 * @param string              $content  Inline content.
+	 * @param string              $src      Final script URL, empty for inline.
+	 * @param array<string,mixed> $settings Plugin settings.
+	 */
+	private static function rocket_skipped( string $tag, string $content, string $src, array $settings ): bool {
+		$attributes = self::attributes( $tag );
+
+		// The theme's own opt-out, the analogue of the data attribute the
+		// well-known loader uses.
+		$defer = strtolower( trim( (string) ( $attributes['data-mmf-defer'] ?? '' ) ) );
+
+		if ( 'false' === $defer ) {
+			return true;
+		}
+
+		$id = strtolower( trim( (string) ( $attributes['id'] ?? '' ) ) );
+
+		// Never our own loader or another script of this plugin.
+		if ( '' !== $id && str_starts_with( $id, 'mmf-' ) ) {
+			return true;
+		}
+
+		$type = strtolower( trim( (string) ( $attributes['type'] ?? '' ) ) );
+
+		if ( self::is_module( $type ) || ! self::is_js_type( $type ) ) {
+			return true;
+		}
+
+		// An inline script that writes into the document cannot run after
+		// parsing: document.write() at that point replaces the whole page.
+		if ( '' === $src && 1 === preg_match( '/document\s*\.\s*write(?:ln)?\s*\(/i', $content ) ) {
+			return true;
+		}
+
+		$needle = '' !== $src ? $src : $id;
+
+		return '' !== $needle && self::matches( $needle, $settings['rocket_exclude'] ?? array() );
+	}
+
+	/**
+	 * Turns a tag into a whole-page-mode placeholder.
+	 *
+	 * External: the URL moves to `data-mmf-rsrc`. Inline: the block keeps its
+	 * content and gets `data-mmf-rcode`, so the loader can execute it in place.
+	 *
+	 * @param string $tag Full tag.
+	 * @param string $src Final script URL, empty for inline.
+	 */
+	private static function rocket_tag( string $tag, string $src ): string {
+		if ( '' === $src ) {
+			$tag = self::replace_attribute( $tag, 'type', 'text/plain' );
+			$tag = self::replace_attribute( $tag, 'data-mmf-rcode', '1' );
+
+			return $tag;
+		}
+
+		$tag = self::remove_attribute( $tag, 'src' );
+		$tag = self::remove_attribute( $tag, 'async' );
+		$tag = self::remove_attribute( $tag, 'defer' );
+		$tag = self::replace_attribute( $tag, 'type', 'text/plain' );
+		$tag = self::replace_attribute( $tag, 'data-mmf-rsrc', $src );
+
+		return $tag;
 	}
 
 	/**

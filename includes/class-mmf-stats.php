@@ -54,6 +54,7 @@ final class MMF_Stats {
 			'failed'             => 0,
 			'delayed'            => 0,
 			'last_delayed'       => 0,
+			'rocket'             => 0,
 			'external_localized' => 0,
 			'external_kept'      => 0,
 			'external_failed'    => 0,

@@ -51,6 +51,13 @@ final class MMF_Notices {
 	}
 
 	/**
+	 * Warning shown next to the whole-page mode switch.
+	 */
+	public static function rocket_warning(): string {
+		return __( 'Rocket-режим откладывает все скрипты страницы, включая инлайн, до окончания разбора DOM. Если что-то сломалось — добавьте файл или id в исключения, выключите режим или проверьте страницу в тестовом режиме.', 'modern-minify' );
+	}
+
+	/**
 	 * Prints the notices on the screens where the plugin is managed.
 	 */
 	public static function render(): void {

@@ -56,6 +56,11 @@ final class MMF_Loader {
 	public const MAX_BYTES = 2048;
 
 	/**
+	 * Budget of the whole-page mode, which needs a sequential queue.
+	 */
+	public const MAX_BYTES_ROCKET = 3072;
+
+	/**
 	 * Timeout bounds, in milliseconds.
 	 */
 	public const MIN_TIMEOUT = 1000;
@@ -76,19 +81,36 @@ final class MMF_Loader {
 	private const EVENTS = array( 'scroll', 'mousemove', 'touchstart', 'keydown', 'click', 'wheel' );
 
 	/**
-	 * Placeholder selector, shared with the pipeline that prints it.
+	 * Placeholder selector of the interaction mode, shared with the pipeline.
 	 */
 	public const SELECTOR = 'script[type="text/plain"][data-mmf-src],script[type="text/plain"][data-mmf-inline]';
 
 	/**
+	 * Placeholder selector of the whole-page mode.
+	 *
+	 * A different attribute pair on purpose: a page can carry the markers of
+	 * both modes, and neither loader may pick up the other's queue.
+	 */
+	public const SELECTOR_ROCKET = 'script[type="text/plain"][data-mmf-rsrc],script[type="text/plain"][data-mmf-rcode]';
+
+	/**
 	 * The loader body for one mode, or an empty string when it would be too big.
 	 *
+	 * Both modes share the guard, the nonce lookup, the attribute cloning and
+	 * the budget check; they differ in the queue and in the trigger. The
+	 * whole-page mode runs the queue one script at a time (an external file is
+	 * awaited before the next one is inserted), which is what keeps the order of
+	 * externals and inline blocks.
+	 *
 	 * @param string $mode    `interaction` or `domready`.
-	 * @param int    $timeout Fallback delay in milliseconds.
+	 * @param int    $timeout Fallback delay in milliseconds (interaction only).
+	 * @param int    $budget  Size budget in bytes.
 	 */
-	public static function script( string $mode, int $timeout = 5000 ): string {
+	public static function script( string $mode, int $timeout = 5000, int $budget = self::MAX_BYTES ): string {
 		$mode    = self::normalize_mode( $mode );
 		$timeout = self::normalize_timeout( $timeout );
+		$budget  = max( 1024, $budget );
+		$rocket  = self::MODE_DOMREADY === $mode;
 
 		$events = '';
 
@@ -96,35 +118,114 @@ final class MMF_Loader {
 			$events .= ( '' === $events ? '' : ',' ) . '"' . $event . '"';
 		}
 
-		$trigger = self::MODE_DOMREADY === $mode
+		$queue = $rocket
+			? 'function R(){if(w.mmfL>1)return;w.mmfL=2;var l=d.querySelectorAll(q),i=0,x=N();'
+				. 'function n(){if(i>=l.length){w.mmfL=3;return}var e=l[i++],s=d.createElement("script"),u,k,a;'
+				. 'for(k=0;k<e.attributes.length;k++){a=e.attributes[k];'
+				. 'if(/^(type|src|async|defer|data-mmf-)/i.test(a.name))continue;s.setAttribute(a.name,a.value)}'
+				. 'if(x)s.setAttribute("nonce",x);'
+				. 'u=e.getAttribute("data-mmf-src")||e.getAttribute("data-mmf-rsrc");'
+				. 'if(u){s.src=u;s.async=!1;s.onload=s.onerror=n}else{s.text=e.textContent||""}'
+				. 'e.parentNode.replaceChild(s,e);if(!u)n()}n()}'
+			: 'function R(){if(w.mmfL>1)return;w.mmfL=2;var l=d.querySelectorAll(q),i,k,e,s,u,a,x;'
+				. 'for(i=0;i<l.length;i++){e=l[i];s=d.createElement("script");'
+				. 'for(k=0;k<e.attributes.length;k++){a=e.attributes[k];'
+				. 'if(/^(type|src|async|defer|data-mmf-)/i.test(a.name))continue;s.setAttribute(a.name,a.value)}'
+				. 's.async=!1;x=N();if(x)s.setAttribute("nonce",x);u=e.getAttribute("data-mmf-src");'
+				. 'if(u){s.src=u}else{s.textContent=e.textContent||""}'
+				. 'e.parentNode.replaceChild(s,e)}}';
+
+		$trigger = $rocket
 			? 'if("loading"===d.readyState){d.addEventListener("DOMContentLoaded",R,{once:!0})}else{R()}'
-			: 'if("loading"===d.readyState){d.addEventListener("DOMContentLoaded",S,{once:!0})}else{S()}';
+			: 'function T(){setTimeout(R,' . $timeout . ')}'
+				. 'function S(){T();[' . $events . '].forEach(function(t){w.addEventListener(t,R,{once:!0,passive:!0})})}'
+				. 'if("loading"===d.readyState){d.addEventListener("DOMContentLoaded",S,{once:!0})}else{S()}';
 
 		$js = '(function(){var w=window,d=document,n=null,c=navigator.connection;'
 			. 'if(w.mmfL)return;w.mmfL=1;'
-			. 'var q=' . wp_json_encode( self::SELECTOR ) . ';'
+			. 'var q=' . wp_json_encode( $rocket ? self::SELECTOR_ROCKET : self::SELECTOR ) . ';'
 			. 'function N(){if(n===null){var s=d.querySelector("script[nonce]");'
 			. 'n=s?(s.nonce||s.getAttribute("nonce")||""):""}return n}'
-			. 'function R(){if(w.mmfL>1)return;w.mmfL=2;var l=d.querySelectorAll(q),i,k,e,s,u,a,x;'
-			. 'for(i=0;i<l.length;i++){e=l[i];s=d.createElement("script");'
-			. 'for(k=0;k<e.attributes.length;k++){a=e.attributes[k];'
-			. 'if(/^(type|src|async|defer|data-mmf-)/i.test(a.name))continue;s.setAttribute(a.name,a.value)}'
-			. 's.async=!1;x=N();if(x)s.setAttribute("nonce",x);u=e.getAttribute("data-mmf-src");'
-			. 'if(u){s.src=u}else{s.textContent=e.textContent||""}'
-			. 'e.parentNode.replaceChild(s,e)}}'
-			. 'function T(){setTimeout(R,' . $timeout . ')}'
-			. 'function S(){T();[' . $events . '].forEach(function(t){w.addEventListener(t,R,{once:!0,passive:!0})})}'
+			. $queue
+			. 'if(!w.addEventListener||!w.Promise){R();return}'
 			. 'if(c&&c.saveData){R();return}'
 			. $trigger
 			. '})();';
 
 		// A loader above the budget is not printed: the caller then serves the
 		// scripts as usual instead of deferring them with a missing loader.
-		if ( strlen( $js ) > self::MAX_BYTES ) {
+		if ( strlen( $js ) > $budget ) {
 			return '';
 		}
 
 		return $js;
+	}
+
+	/**
+	 * Whether a generated tag carries a CSP nonce.
+	 *
+	 * @param string $tag Script tag.
+	 */
+	public static function tag_has_nonce( string $tag ): bool {
+		return 1 === preg_match( '/\snonce\s*=/i', $tag );
+	}
+
+	/**
+	 * Whether the response appears to be under a Content-Security-Policy.
+	 *
+	 * Only headers set through PHP are visible here; a policy added by the web
+	 * server is invisible to the plugin, and that is why the filter exists: a
+	 * site behind a hand-written CSP can still tell the plugin about it.
+	 */
+	public static function csp_present(): bool {
+		$present = apply_filters( 'mmf_csp_present', self::header_has_csp() );
+
+		return (bool) $present;
+	}
+
+	/**
+	 * Whether the whole-page mode is blocked by a CSP without a nonce.
+	 *
+	 * A strict policy without a nonce for our inline loader means the loader
+	 * would be refused by the browser: placeholders would stay inert and the
+	 * page would lose its JavaScript. The mode therefore does not activate.
+	 *
+	 * @param string $js Loader body.
+	 */
+	public static function csp_blocked( string $js ): bool {
+		if ( '' === $js || ! self::csp_present() ) {
+			return false;
+		}
+
+		return ! self::tag_has_nonce( self::script_tag( $js ) );
+	}
+
+	/**
+	 * Hash of the loader, for a policy that lists hashes instead of nonces.
+	 *
+	 * @param string $js Loader body.
+	 */
+	public static function hash( string $js ): string {
+		return 'sha256-' . base64_encode( hash( 'sha256', $js, true ) );
+	}
+
+	/**
+	 * Scans the headers set by PHP for a policy with `script-src`.
+	 */
+	private static function header_has_csp(): bool {
+		if ( ! function_exists( 'headers_list' ) ) {
+			return false;
+		}
+
+		foreach ( (array) headers_list() as $header ) {
+			$header = strtolower( (string) $header );
+
+			if ( str_starts_with( $header, 'content-security-policy' ) && str_contains( $header, 'script-src' ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**

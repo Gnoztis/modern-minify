@@ -165,6 +165,7 @@ final class MMF_Admin {
 			}
 
 			self::render_merge_warning( (string) $slug );
+			self::render_rocket_notices( (string) $slug );
 
 			echo '<table class="form-table" role="presentation"><tbody>';
 
@@ -180,7 +181,6 @@ final class MMF_Admin {
 
 			echo '</div>';
 		}
-
 		submit_button();
 		echo '</form>';
 
@@ -218,7 +218,7 @@ final class MMF_Admin {
 	public static function tab_fields(): array {
 		return array(
 			'status'     => array( 'enabled' ),
-			'javascript' => array( 'minify_js', 'merge_js', 'async_js', 'defer_js', 'defer_skip', 'exclude_js', 'move_scripts_to_footer', 'delay_js', 'delay_js_exclude', 'delay_js_timeout' ),
+			'javascript' => array( 'minify_js', 'merge_js', 'async_js', 'defer_js', 'defer_skip', 'exclude_js', 'move_scripts_to_footer', 'delay_js', 'delay_js_exclude', 'delay_js_timeout', 'rocket_mode', 'rocket_exclude' ),
 			'css'        => array( 'minify_css', 'merge_css', 'inline_css', 'inline_css_limit', 'remove_print_css', 'exclude_css' ),
 			'fonts'      => array( 'fonts_method', 'fawesome_method' ),
 			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_generator', 'remove_emoji', 'ver_mode' ),
@@ -276,6 +276,14 @@ final class MMF_Admin {
 			'delay_js_timeout'       => array(
 				__( 'Страховочный таймаут, секунды', 'modern-minify' ),
 				__( 'Если посетитель ничего не делает, отложенные скрипты загрузятся сами через столько секунд после готовности страницы.', 'modern-minify' ),
+			),
+			'rocket_mode'            => array(
+				__( 'Rocket-режим: отложить весь JavaScript', 'modern-minify' ),
+				__( 'Все скрипты, включая инлайн, выполняются после разбора страницы в исходном порядке. Если что-то сломалось — добавьте файл в исключения или выключите режим; для проверки используйте тестовый режим.', 'modern-minify' ),
+			),
+			'rocket_exclude'         => array(
+				__( 'Исключения Rocket-режима', 'modern-minify' ),
+				__( 'Пути файлов и id инлайн-скриптов через строку; поддерживается *. Скрипты с data-mmf-defer="false", module и сам загрузчик не трогаются никогда.', 'modern-minify' ),
 			),
 			'minify_css'             => array(
 				__( 'Минифицировать CSS', 'modern-minify' ),
@@ -503,6 +511,7 @@ final class MMF_Admin {
 			__( 'Скриптов перенесено в подвал', 'modern-minify' ) => (string) (int) $stats['moved'],
 			__( 'Скриптов отложено, всего', 'modern-minify' ) => (string) (int) $stats['delayed'],
 			__( 'Отложено на последней учтённой странице', 'modern-minify' ) => (string) (int) $stats['last_delayed'],
+			__( 'Отложено Rocket-режимом', 'modern-minify' ) => (string) (int) $stats['rocket'],
 			__( 'Внешних файлов локализовано', 'modern-minify' ) => (string) (int) $stats['external_localized'],
 			__( 'Внешних оставлено', 'modern-minify' )     => (string) (int) $stats['external_kept'],
 			__( 'Внешних не удалось скачать', 'modern-minify' ) => (string) (int) $stats['external_failed'],
@@ -643,6 +652,36 @@ final class MMF_Admin {
 
 		if ( MMF_Config::get( 'test_mode' ) ) {
 			echo '<div class="notice notice-info"><p>' . esc_html__( 'Тестовый режим: оптимизация применяется только к администраторам, посетители видят исходную страницу.', 'modern-minify' ) . '</p></div>';
+		}
+	}
+
+	/**
+	 * Prints the whole-page mode notices: what it does, why it is blocked and how
+	 * it relates to Delay JS.
+	 *
+	 * @param string $slug Tab slug.
+	 */
+	private static function render_rocket_notices( string $slug ): void {
+		if ( 'javascript' !== $slug || ! MMF_Config::get( 'rocket_mode' ) ) {
+			return;
+		}
+
+		echo '<div class="notice notice-warning inline"><p>' . esc_html( MMF_Notices::rocket_warning() ) . '</p></div>';
+
+		$js = MMF_Loader::script( MMF_Loader::MODE_DOMREADY, 5000, MMF_Loader::MAX_BYTES_ROCKET );
+
+		if ( MMF_Loader::csp_blocked( $js ) ) {
+			printf(
+				'<div class="notice notice-error inline"><p>%s <code>%s</code></p></div>',
+				esc_html__( 'Rocket-режим не активирован: на сайте есть Content-Security-Policy без nonce для нашего загрузчика. Разрешите nonce (плагин политики фильтрует wp_inline_script_attributes) или добавьте в политику хеш:', 'modern-minify' ),
+				esc_html( MMF_Loader::hash( $js ) )
+			);
+		}
+
+		$delay_patterns = MMF_Config::get( 'delay_js', array() );
+
+		if ( is_array( $delay_patterns ) && array() !== $delay_patterns ) {
+			echo '<div class="notice notice-info inline"><p>' . esc_html__( 'Rocket-режим откладывает все скрипты, поэтому список Delay JS не действует: если файл попал в оба, побеждает Rocket-режим.', 'modern-minify' ) . '</p></div>';
 		}
 	}
 

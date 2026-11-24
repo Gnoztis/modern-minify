@@ -95,6 +95,16 @@ final class MMF_Admin_Bar {
 					)
 				);
 			}
+
+			if ( MMF_Config::get( 'rocket_mode' ) ) {
+				$bar->add_node(
+					array(
+						'id'    => 'mmf-rocket',
+						'title' => esc_html__( 'Modern Minify: Rocket-режим активен', 'modern-minify' ),
+						'href'  => esc_url( admin_url( 'options-general.php?page=' . MMF_Admin::PAGE . '&tab=javascript' ) ),
+					)
+				);
+			}
 		}
 	}
 }
