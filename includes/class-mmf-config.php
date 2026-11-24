@@ -304,9 +304,21 @@ final class MMF_Config {
 			// files until the cache is cleared by hand.
 			'cache_ttl'              => array(
 				'type'    => 'int',
-				'default' => 30,
+				'default' => 7,
 				'min'     => 0,
 				'max'     => 3650,
+			),
+			'cache_max_files'        => array(
+				'type'    => 'int',
+				'default' => 1000,
+				'min'     => 100,
+				'max'     => 100000,
+			),
+			'cache_max_size'         => array(
+				'type'    => 'int',
+				'default' => 100,
+				'min'     => 10,
+				'max'     => 10240,
 			),
 			// Diagnostics for the admin screen: no writes, only reporting.
 			'debug'                  => array(

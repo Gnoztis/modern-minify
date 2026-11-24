@@ -279,9 +279,16 @@ final class MMF_Minifier {
 			return array();
 		}
 
+		if ( self::CSS === $type ) {
+			return array(
+				'minify_css' => (bool) MMF_Config::get( 'minify_css', true ),
+				'merge_css'  => (bool) MMF_Config::get( 'merge_css', true ),
+			);
+		}
+
 		return array(
-			'minify' => (bool) MMF_Config::get( 'minify_' . $type, true ),
-			'debug'  => (bool) MMF_Config::get( 'debug', false ),
+			'minify_js' => (bool) MMF_Config::get( 'minify_js', true ),
+			'merge_js'  => (bool) MMF_Config::get( 'merge_js', false ),
 		);
 	}
 

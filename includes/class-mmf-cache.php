@@ -51,6 +51,14 @@ final class MMF_Cache {
 	 * Used for statistics, the TTL cleanup and the full delete, so a new kind of
 	 * cached file cannot be left behind by forgetting to add it in one place.
 	 */
+	public const LAST_CLEANUP_OPTION = 'mmf_last_cleanup';
+
+	/**
+	 * A file younger than this is never deleted: a page in a reverse-proxy
+	 * cache may still point at it.
+	 */
+	private const MIN_AGE = HOUR_IN_SECONDS;
+
 	private const PATTERNS = array(
 		'*.min.js',
 		'*.min.css',
@@ -213,7 +221,7 @@ final class MMF_Cache {
 	public static function hash( string $source, string $type, array $settings = array() ): string {
 		$signature = array(
 			'type'     => $type,
-			'version'  => defined( 'MMF_VERSION' ) ? (string) MMF_VERSION : '',
+			'minifier' => defined( 'MMF_MINIFIER_VERSION' ) ? (string) MMF_MINIFIER_VERSION : '',
 			'settings' => $settings,
 		);
 
@@ -354,26 +362,91 @@ final class MMF_Cache {
 	 *
 	 * @return int Number of deleted files.
 	 */
-	public static function cleanup(): int {
-		$ttl = self::ttl_seconds();
+	/**
+	 * Drops files by age, then trims the oldest until the count and size fit.
+	 *
+	 * Two safety rules: a file younger than an hour is never removed (a page in
+	 * a reverse-proxy cache may still point at it), and limits always apply even
+	 * when the TTL is 0.
+	 *
+	 * @param int|null $ttl_days   Age in days, null reads the setting.
+	 * @param int|null $max_files  File limit, null reads the setting.
+	 * @param int|null $max_size_mb Size limit in MiB, null reads the setting.
+	 * @return int Number of deleted files.
+	 */
+	public static function cleanup( ?int $ttl_days = null, ?int $max_files = null, ?int $max_size_mb = null ): int {
+		$ttl_days    = null === $ttl_days ? (int) MMF_Config::get( 'cache_ttl', 7 ) : $ttl_days;
+		$max_files   = null === $max_files ? (int) MMF_Config::get( 'cache_max_files', 1000 ) : $max_files;
+		$max_size_mb = null === $max_size_mb ? (int) MMF_Config::get( 'cache_max_size', 100 ) : $max_size_mb;
 
-		if ( $ttl <= 0 ) {
-			return 0;
+		$now      = time();
+		$young    = $now - self::MIN_AGE;
+		$deleted  = 0;
+		$cutoff   = $ttl_days > 0 ? $now - $ttl_days * DAY_IN_SECONDS : 0;
+
+		// Age first: expired files go even when the limits are not reached.
+		if ( $cutoff > 0 ) {
+			foreach ( self::asset_files() as $file ) {
+				$modified = @filemtime( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- a file may be removed between glob() and stat().
+
+				if ( false === $modified || $modified > $young || $modified >= $cutoff ) {
+					continue;
+				}
+
+				if ( @unlink( $file ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors -- the file may be removed by a parallel request.
+					$deleted++;
+				}
+			}
 		}
 
-		$cutoff  = time() - $ttl;
-		$deleted = 0;
+		// Then the count and size caps, oldest first, never touching a young file.
+		$files = array();
+		$size  = 0;
 
 		foreach ( self::asset_files() as $file ) {
-			$modified = @filemtime( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- a file may be removed between glob() and stat().
+			$modified = @filemtime( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- a file may be removed by a parallel request.
+			$bytes    = @filesize( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- a file may be removed by a parallel request.
 
-			if ( false === $modified || $modified >= $cutoff ) {
+			if ( false === $modified || false === $bytes ) {
 				continue;
 			}
 
-			if ( @unlink( $file ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors -- the file may be removed by a parallel request.
-				$deleted++;
+			$files[] = array(
+				'path'  => $file,
+				'mtime' => (int) $modified,
+				'size'  => (int) $bytes,
+			);
+			$size   += (int) $bytes;
+		}
+
+		usort(
+			$files,
+			static function ( $left, $right ) {
+				return $left['mtime'] <=> $right['mtime'];
 			}
+		);
+
+		$count      = count( $files );
+		$max_bytes  = max( 0, $max_size_mb ) * 1024 * 1024;
+
+		foreach ( $files as $entry ) {
+			if ( $count <= $max_files && ( $max_bytes <= 0 || $size <= $max_bytes ) ) {
+				break;
+			}
+
+			if ( $entry['mtime'] > $young ) {
+				continue;
+			}
+
+			if ( @unlink( $entry['path'] ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors -- the file may be removed by a parallel request.
+				$deleted++;
+				$count--;
+				$size -= $entry['size'];
+			}
+		}
+
+		if ( function_exists( 'update_option' ) ) {
+			update_option( self::LAST_CLEANUP_OPTION, $now, false );
 		}
 
 		return $deleted;
@@ -382,7 +455,7 @@ final class MMF_Cache {
 	/**
 	 * Statistics for the admin screen: what is on disk right now.
 	 *
-	 * @return array{dir:string,url:string,exists:bool,writable:bool,files:int,size:int,updated:int}
+	 * @return array{dir:string,url:string,exists:bool,writable:bool,files:int,size:int,updated:int,oldest:int}
 	 */
 	public static function stats(): array {
 		$dir   = self::base_dir();
@@ -394,6 +467,7 @@ final class MMF_Cache {
 			'files'    => 0,
 			'size'     => 0,
 			'updated'  => 0,
+			'oldest'   => 0,
 		);
 
 		if ( '' === $dir ) {
@@ -414,6 +488,10 @@ final class MMF_Cache {
 
 			if ( false !== $modified && (int) $modified > $stats['updated'] ) {
 				$stats['updated'] = (int) $modified;
+			}
+
+			if ( false !== $modified && ( 0 === $stats['oldest'] || (int) $modified < $stats['oldest'] ) ) {
+				$stats['oldest'] = (int) $modified;
 			}
 		}
 

@@ -422,7 +422,7 @@ final class MMF_Admin {
 			'fonts'      => array( 'fonts_method', 'fawesome_method', 'inline_fonts_css' ),
 			'external'   => array(),
 			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_generator', 'remove_emoji', 'ver_mode', 'disable_gravatar' ),
-			'advanced'   => array( 'cache_ttl', 'test_mode', 'debug', 'merge_max_files', 'merge_max_size' ),
+			'advanced'   => array( 'cache_ttl', 'cache_max_files', 'cache_max_size', 'test_mode', 'debug', 'merge_max_files', 'merge_max_size' ),
 		);
 	}
 
@@ -559,7 +559,15 @@ final class MMF_Admin {
 			),
 			'cache_ttl'              => array(
 				__( 'Срок жизни кеша, дней', 'modern-minify' ),
-				__( '0 — хранить до ручной очистки.', 'modern-minify' ),
+				__( '0 — не удалять по возрасту; пределы количества и размера ниже действуют. Файлы моложе часа не удаляются никогда.', 'modern-minify' ),
+			),
+			'cache_max_files'        => array(
+				__( 'Предел файлов в кеше', 'modern-minify' ),
+				__( 'Когда файлов больше, удаляются самые старые; файлы моложе часа не трогаются.', 'modern-minify' ),
+			),
+			'cache_max_size'         => array(
+				__( 'Предел размера кеша, МБ', 'modern-minify' ),
+				__( 'Когда кеш больше, удаляются самые старые файлы; файлы моложе часа не трогаются.', 'modern-minify' ),
 			),
 			'test_mode'              => array(
 				__( 'Тестовый режим', 'modern-minify' ),
@@ -780,11 +788,19 @@ final class MMF_Admin {
 			)
 		);
 
+		$max_files = (int) MMF_Config::get( 'cache_max_files', 1000 );
+		$max_size  = (int) MMF_Config::get( 'cache_max_size', 100 ) * 1024 * 1024;
+		$ttl_days  = (int) MMF_Config::get( 'cache_ttl', 7 );
+		$cleaned   = (int) get_option( MMF_Cache::LAST_CLEANUP_OPTION, 0 );
+
 		self::status_group(
 			__( 'Кеш и ошибки', 'modern-minify' ),
 			array(
-				__( 'Файлов в кеше', 'modern-minify' )      => (string) (int) $cache['files'],
-				__( 'Размер кеша', 'modern-minify' )        => size_format( (int) $cache['size'] ),
+				__( 'Файлов в кеше', 'modern-minify' )      => (int) $cache['files'] . ' / ' . $max_files,
+				__( 'Размер кеша', 'modern-minify' )        => size_format( (int) $cache['size'] ) . ' / ' . size_format( $max_size ),
+				__( 'Самый старый файл', 'modern-minify' )  => $cache['oldest'] > 0 ? (string) wp_date( 'Y-m-d H:i:s', (int) $cache['oldest'] ) : __( '—', 'modern-minify' ),
+				__( 'TTL, дней', 'modern-minify' )          => $ttl_days > 0 ? (string) $ttl_days : __( 'без ограничения', 'modern-minify' ),
+				__( 'Последняя очистка', 'modern-minify' )  => $cleaned > 0 ? (string) wp_date( 'Y-m-d H:i:s', $cleaned ) : __( 'ещё не было', 'modern-minify' ),
 				__( 'Кеш обновлён', 'modern-minify' )       => $cache['updated'] > 0 ? (string) wp_date( 'Y-m-d H:i:s', (int) $cache['updated'] ) : __( 'ещё не было', 'modern-minify' ),
 				__( 'Каталог', 'modern-minify' )            => (string) $cache['dir'],
 				__( 'Доступен для записи', 'modern-minify' ) => $cache['writable'] ? __( 'да', 'modern-minify' ) : __( 'нет', 'modern-minify' ),

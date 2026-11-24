@@ -177,7 +177,7 @@ final class MMF_Fonts {
 				return $result;
 			}
 
-			$local = self::localize( $href );
+			$local = self::localize( $href, $method );
 
 			if ( '' === $local ) {
 				$result['stats']['failed'] = 1;
@@ -331,14 +331,15 @@ final class MMF_Fonts {
 	 * pointing at the cache. Any failure returns an empty string: a half-local
 	 * stylesheet is worse than an honest external one.
 	 *
-	 * @param string $href Google Fonts stylesheet URL.
+	 * @param string $href   Google Fonts stylesheet URL.
+	 * @param string $method Fonts method, part of the cache signature.
 	 */
-	private static function localize( string $href ): string {
+	private static function localize( string $href, string $method ): string {
 		if ( array_key_exists( $href, self::$memo ) ) {
 			return self::$memo[ $href ];
 		}
 
-		$css_name = MMF_Cache::hash( $href, 'fonts' ) . '.fonts.css';
+		$css_name = MMF_Cache::hash( $href, 'fonts', array( 'fonts_method' => $method ) ) . '.fonts.css';
 		$css_url  = MMF_Cache::url_of( $css_name );
 
 		if ( '' === $css_url ) {
