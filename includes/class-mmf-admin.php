@@ -218,11 +218,11 @@ final class MMF_Admin {
 	public static function tab_fields(): array {
 		return array(
 			'status'     => array( 'enabled' ),
-			'javascript' => array( 'minify_js', 'merge_js', 'async_js', 'defer_js', 'defer_skip', 'exclude_js', 'move_scripts_to_footer', 'delay_js', 'delay_js_exclude', 'delay_js_timeout', 'rocket_mode', 'rocket_exclude' ),
+			'javascript' => array( 'minify_js', 'merge_js', 'async_js', 'defer_js', 'defer_external', 'defer_skip', 'exclude_js', 'move_scripts_to_footer', 'delay_js', 'delay_js_exclude', 'delay_js_timeout', 'rocket_mode', 'rocket_exclude' ),
 			'css'        => array( 'minify_css', 'merge_css', 'inline_css', 'inline_css_limit', 'remove_print_css', 'exclude_css' ),
 			'fonts'      => array( 'fonts_method', 'fawesome_method' ),
 			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_generator', 'remove_emoji', 'ver_mode' ),
-			'advanced'   => array( 'cache_ttl', 'test_mode', 'debug', 'external_mode', 'external_max_size', 'external_exclude' ),
+			'advanced'   => array( 'cache_ttl', 'test_mode', 'debug', 'external_mode', 'external_max_size', 'external_exclude', 'merge_max_files', 'merge_max_size' ),
 		);
 	}
 
@@ -284,6 +284,18 @@ final class MMF_Admin {
 			'rocket_exclude'         => array(
 				__( 'Исключения Rocket-режима', 'modern-minify' ),
 				__( 'Пути файлов и id инлайн-скриптов через строку; поддерживается *. Скрипты с data-mmf-defer="false", module и сам загрузчик не трогаются никогда.', 'modern-minify' ),
+			),
+			'defer_external'         => array(
+				__( 'defer для внешних скриптов', 'modern-minify' ),
+				__( 'Внешний файл получает defer (но не async). Чужой код может зависеть от порядка загрузки — включайте осознанно и проверяйте страницу.', 'modern-minify' ),
+			),
+			'merge_max_files'        => array(
+				__( 'Объединение: максимум файлов в пакете', 'modern-minify' ),
+				__( 'Если рядом стоящих файлов больше, пакет не собирается и теги остаются как были.', 'modern-minify' ),
+			),
+			'merge_max_size'         => array(
+				__( 'Объединение: максимум размера пакета, МиБ', 'modern-minify' ),
+				__( 'Суммарный размер после минификации. Превышение — пакет не собирается.', 'modern-minify' ),
 			),
 			'minify_css'             => array(
 				__( 'Минифицировать CSS', 'modern-minify' ),
@@ -512,6 +524,10 @@ final class MMF_Admin {
 			__( 'Скриптов отложено, всего', 'modern-minify' ) => (string) (int) $stats['delayed'],
 			__( 'Отложено на последней учтённой странице', 'modern-minify' ) => (string) (int) $stats['last_delayed'],
 			__( 'Отложено Rocket-режимом', 'modern-minify' ) => (string) (int) $stats['rocket'],
+			__( 'Пакетов собрано', 'modern-minify' )      => (string) (int) $stats['bundles'],
+			__( 'Файлов в пакетах', 'modern-minify' )     => (string) (int) $stats['bundled_files'],
+			__( 'Запросов сэкономлено', 'modern-minify' ) => (string) max( 0, (int) $stats['bundled_files'] - (int) $stats['bundles'] ),
+			__( 'Размер пакетов, КБ', 'modern-minify' )    => (string) (int) round( (int) $stats['bundle_bytes'] / 1024 ),
 			__( 'Внешних файлов локализовано', 'modern-minify' ) => (string) (int) $stats['external_localized'],
 			__( 'Внешних оставлено', 'modern-minify' )     => (string) (int) $stats['external_kept'],
 			__( 'Внешних не удалось скачать', 'modern-minify' ) => (string) (int) $stats['external_failed'],
@@ -697,6 +713,10 @@ final class MMF_Admin {
 
 		if ( 'css' === $slug && MMF_Config::get( 'merge_css' ) ) {
 			echo '<div class="notice notice-warning inline"><p>' . esc_html( MMF_Notices::merge_warning() ) . '</p></div>';
+		}
+
+		if ( 'javascript' === $slug && MMF_Config::get( 'defer_external' ) ) {
+			echo '<div class="notice notice-warning inline"><p>' . esc_html( MMF_Notices::defer_external_warning() ) . '</p></div>';
 		}
 	}
 

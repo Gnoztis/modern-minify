@@ -113,6 +113,9 @@ final class MMF_Assets {
 			&& ! $minify_css
 			&& ! $delay
 			&& ! $rocket
+			&& empty( $settings['merge_js'] )
+			&& empty( $settings['merge_css'] )
+			&& empty( $settings['defer_external'] )
 			&& empty( $settings['defer_js'] )
 			&& empty( $settings['async_js'] )
 			&& empty( $settings['remove_print_css'] )
@@ -124,6 +127,16 @@ final class MMF_Assets {
 				'html'  => $html,
 				'stats' => $stats,
 			);
+		}
+
+		// Bundling runs on the original markup: a group has to be recognised
+		// before the pipeline rewrites URLs and adds attributes.
+		$merge_stats = array();
+
+		if ( ! empty( $settings['merge_js'] ) || ! empty( $settings['merge_css'] ) ) {
+			$merged      = MMF_Merge::apply( $html, $settings );
+			$html        = $merged['html'];
+			$merge_stats = $merged['stats'];
 		}
 
 		$delay_seconds = $settings['delay_js_timeout'] ?? 5;
@@ -284,6 +297,7 @@ final class MMF_Assets {
 		}
 
 		// The status screen lists the external hosts of the page just rewritten.
+		$stats = self::merge_stats( $stats, $merge_stats );
 		$stats['external_report'] = MMF_External::report();
 
 		return array(
@@ -345,6 +359,12 @@ final class MMF_Assets {
 
 		$attributes = self::attributes( $tag );
 		$type       = strtolower( trim( (string) ( $attributes['type'] ?? '' ) ) );
+
+		// A bundle is already the minified concatenation of its group: touching
+		// it again would re-minify it, and moving it would break its order.
+		if ( self::has_attribute( $tag, MMF_Merge::MARKER ) ) {
+			return $result;
+		}
 
 		// Module scripts have their own loading and scoping rules: no rewrite,
 		// no minification, no async/defer, no deferral of any kind.
@@ -408,6 +428,20 @@ final class MMF_Assets {
 					return $result;
 				}
 			}
+		}
+
+		// Defer for external files is a separate opt-in: a CDN file is often the
+		// heaviest one, but its own code may rely on being parsed early. Never
+		// async, never on a module, never on an excluded file.
+		if ( ! $is_local && ! empty( $settings['defer_external'] )
+			&& ! self::has_attribute( $tag, 'async' )
+			&& ! self::matches( $src, $settings['defer_skip'] ?? array() ) ) {
+			if ( ! self::has_attribute( $tag, 'defer' ) ) {
+				$tag                      = self::add_flag( $tag, 'defer' );
+				$result['stats']['defer'] = 1;
+			}
+
+			$result['tag'] = $tag;
 		}
 
 		// Local files are minified and rewritten; an external file that was just
@@ -668,6 +702,11 @@ final class MMF_Assets {
 
 		$attributes = self::attributes( $tag );
 		$rel        = strtolower( trim( (string) ( $attributes['rel'] ?? '' ) ) );
+
+		// A bundle is already minified and cached; leave it as it is.
+		if ( self::has_attribute( $tag, MMF_Merge::MARKER ) ) {
+			return $result;
+		}
 
 		if ( ! self::is_stylesheet( $rel ) ) {
 			return $result;
@@ -1097,10 +1136,13 @@ final class MMF_Assets {
 	 * repeating the scheme and host. A list coming from a broken option is not
 	 * an array: it is treated as empty instead of warning.
 	 *
+	 * Public because the merge pass asks the same question with the same
+	 * wildcard rules; two matchers would drift apart.
+	 *
 	 * @param string $url      Asset URL.
 	 * @param mixed  $patterns Configured patterns.
 	 */
-	private static function matches( string $url, $patterns ): bool {
+	public static function matches( string $url, $patterns ): bool {
 		$patterns = is_array( $patterns ) ? $patterns : array();
 		$subject  = strtolower( (string) preg_replace( '/[?#].*$/', '', trim( $url ) ) );
 		$path     = strtolower( (string) wp_parse_url( $subject, PHP_URL_PATH ) );
@@ -1253,10 +1295,13 @@ final class MMF_Assets {
 	/**
 	 * Whether the tag already carries the attribute.
 	 *
+	 * Public because the merge pass has to recognise the same attributes the
+	 * per-tag pipeline looks at.
+	 *
 	 * @param string $tag  Full tag.
 	 * @param string $name Attribute name.
 	 */
-	private static function has_attribute( string $tag, string $name ): bool {
+	public static function has_attribute( string $tag, string $name ): bool {
 		return 1 === preg_match(
 			'/\s' . preg_quote( $name, '/' ) . '(?=[\s=\/>])/i',
 			$tag

@@ -48,8 +48,10 @@ final class MMF_Config {
 	 *    `external_exclude`); a site that wants the old behaviour sets `keep`.
 	 * 7: the whole-page mode arrived (`rocket_mode`, `rocket_exclude`), off by
 	 *    default because it defers every script.
+	 * 8: bundling limits and external defer (`defer_external`, `merge_max_files`,
+	 *    `merge_max_size`); bundling stays off and external defer stays off.
 	 */
-	public const SCHEMA = 7;
+	public const SCHEMA = 8;
 
 	/**
 	 * Upper bound of one exclusion list, in entries.
@@ -194,6 +196,25 @@ final class MMF_Config {
 			'rocket_exclude'         => array(
 				'type'    => 'list',
 				'default' => array(),
+			),
+			// `defer` on external scripts: off by default, because foreign code
+			// may rely on being parsed before the rest of the page.
+			'defer_external'         => array(
+				'type'    => 'bool',
+				'default' => false,
+			),
+			// Bundle limits: a group above either one is left as separate tags.
+			'merge_max_files'        => array(
+				'type'    => 'int',
+				'default' => 10,
+				'min'     => 2,
+				'max'     => 50,
+			),
+			'merge_max_size'         => array(
+				'type'    => 'int',
+				'default' => 1,
+				'min'     => 1,
+				'max'     => 20,
 			),
 			'exclude_js'             => array(
 				'type'    => 'list',
