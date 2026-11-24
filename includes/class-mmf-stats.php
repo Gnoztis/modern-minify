@@ -41,15 +41,17 @@ final class MMF_Stats {
 	 */
 	public static function defaults(): array {
 		return array(
-			'pages'   => 0,
-			'files'   => 0,
-			'inline'  => 0,
-			'async'   => 0,
-			'defer'   => 0,
-			'moved'   => 0,
-			'print'   => 0,
-			'failed'  => 0,
-			'updated' => 0,
+			'pages'        => 0,
+			'files'        => 0,
+			'inline'       => 0,
+			'async'        => 0,
+			'defer'        => 0,
+			'moved'        => 0,
+			'print'        => 0,
+			'failed'       => 0,
+			'delayed'      => 0,
+			'last_delayed' => 0,
+			'updated'      => 0,
 		);
 	}
 
@@ -115,6 +117,12 @@ final class MMF_Stats {
 		}
 
 		foreach ( $clean as $key => $count ) {
+			if ( 'last_delayed' === $key ) {
+				// A snapshot of the last counted page, not a running total.
+				$stats['last_delayed'] = $count;
+				continue;
+			}
+
 			if ( array_key_exists( $key, $stats ) && 'updated' !== $key ) {
 				$stats[ $key ] = (int) $stats[ $key ] + $count;
 			}

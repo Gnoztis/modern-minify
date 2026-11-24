@@ -233,6 +233,10 @@ final class MMF_Frontend {
 				$stats[ $key ] = (int) $value;
 			}
 
+			// The status screen shows the last counted page separately: "how many
+			// scripts were delayed here" is a per-page number, not a total.
+			$stats['last_delayed'] = (int) ( $assets['stats']['delayed'] ?? 0 );
+
 			MMF_Stats::record( $stats );
 
 			return $html_out;

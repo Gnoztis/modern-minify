@@ -83,6 +83,18 @@ final class MMF_Admin_Bar {
 					'href'  => esc_url( admin_url( 'options-general.php?page=' . MMF_Admin::PAGE . '&tab=advanced' ) ),
 				)
 			);
+
+			$delay_patterns = MMF_Config::get( 'delay_js', array() );
+
+			if ( is_array( $delay_patterns ) && array() !== $delay_patterns ) {
+				$bar->add_node(
+					array(
+						'id'    => 'mmf-delay',
+						'title' => esc_html__( 'Modern Minify: Delay JS активен', 'modern-minify' ),
+						'href'  => esc_url( admin_url( 'options-general.php?page=' . MMF_Admin::PAGE . '&tab=javascript' ) ),
+					)
+				);
+			}
 		}
 	}
 }

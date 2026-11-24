@@ -42,8 +42,10 @@ final class MMF_Config {
 	 * 4: `remove_meta` became `remove_generator` (the generator tag only) and the
 	 *    `ver_mode` choice arrived; the old key is ignored and the new fields
 	 *    take their defaults, which hide the version.
+	 * 5: Delay JS arrived (`delay_js`, `delay_js_exclude`, `delay_js_timeout`);
+	 *    empty patterns mean nothing is delayed, which is the safe default.
 	 */
-	public const SCHEMA = 4;
+	public const SCHEMA = 5;
 
 	/**
 	 * Upper bound of one exclusion list, in entries.
@@ -136,6 +138,25 @@ final class MMF_Config {
 			'move_scripts_to_footer' => array(
 				'type'    => 'bool',
 				'default' => false,
+			),
+			// Delay JS: files whose URLs match these patterns are held back until
+			// the first interaction (or the fallback timeout). An empty list
+			// delays nothing on purpose.
+			'delay_js'               => array(
+				'type'    => 'list',
+				'default' => array(),
+			),
+			'delay_js_exclude'       => array(
+				'type'    => 'list',
+				'default' => array(),
+			),
+			// Seconds after DOM ready before a delayed page loads its scripts
+			// anyway, so a visitor who does nothing still gets a working page.
+			'delay_js_timeout'       => array(
+				'type'    => 'int',
+				'default' => 5,
+				'min'     => 1,
+				'max'     => 30,
 			),
 			'exclude_js'             => array(
 				'type'    => 'list',

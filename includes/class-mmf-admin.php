@@ -213,7 +213,7 @@ final class MMF_Admin {
 	public static function tab_fields(): array {
 		return array(
 			'status'     => array( 'enabled' ),
-			'javascript' => array( 'minify_js', 'merge_js', 'async_js', 'defer_js', 'defer_skip', 'exclude_js', 'move_scripts_to_footer' ),
+			'javascript' => array( 'minify_js', 'merge_js', 'async_js', 'defer_js', 'defer_skip', 'exclude_js', 'move_scripts_to_footer', 'delay_js', 'delay_js_exclude', 'delay_js_timeout' ),
 			'css'        => array( 'minify_css', 'merge_css', 'inline_css', 'inline_css_limit', 'remove_print_css', 'exclude_css' ),
 			'fonts'      => array( 'fonts_method', 'fawesome_method' ),
 			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_generator', 'remove_emoji', 'ver_mode' ),
@@ -259,6 +259,18 @@ final class MMF_Admin {
 			'move_scripts_to_footer' => array(
 				__( 'Перенести скрипты в подвал', 'modern-minify' ),
 				__( 'Локальные скрипты из head переезжают в конец body с сохранением порядка.', 'modern-minify' ),
+			),
+			'delay_js'               => array(
+				__( 'Откладывать загрузку (Delay JS)', 'modern-minify' ),
+				__( 'Файлы, чьи URL совпали с шаблонами, не загружаются и не исполняются до первого взаимодействия посетителя. Пустой список — ничего не откладывается.', 'modern-minify' ),
+			),
+			'delay_js_exclude'       => array(
+				__( 'Не откладывать', 'modern-minify' ),
+				__( 'Исключения для Delay JS. jQuery, wp-i18n и wp-hooks не откладываются никогда, даже если попали под шаблон.', 'modern-minify' ),
+			),
+			'delay_js_timeout'       => array(
+				__( 'Страховочный таймаут, секунды', 'modern-minify' ),
+				__( 'Если посетитель ничего не делает, отложенные скрипты загрузятся сами через столько секунд после готовности страницы.', 'modern-minify' ),
 			),
 			'minify_css'             => array(
 				__( 'Минифицировать CSS', 'modern-minify' ),
@@ -467,6 +479,8 @@ final class MMF_Admin {
 			__( 'Скриптов отложено', 'modern-minify' )     => (string) (int) $stats['defer'],
 			__( 'Скриптов async', 'modern-minify' )        => (string) (int) $stats['async'],
 			__( 'Скриптов перенесено в подвал', 'modern-minify' ) => (string) (int) $stats['moved'],
+			__( 'Скриптов отложено, всего', 'modern-minify' ) => (string) (int) $stats['delayed'],
+			__( 'Отложено на последней учтённой странице', 'modern-minify' ) => (string) (int) $stats['last_delayed'],
 			__( 'Ошибок обработки', 'modern-minify' )      => (string) (int) $stats['failed'],
 			__( 'Файлов в кеше', 'modern-minify' )         => (string) (int) $cache['files'],
 			__( 'Размер кеша', 'modern-minify' )           => size_format( (int) $cache['size'] ),

@@ -90,9 +90,11 @@ final class MMF_Assets {
 		$minify_css = ! empty( $settings['minify_css'] );
 		$fonts      = isset( $settings['fonts_method'] ) && is_string( $settings['fonts_method'] ) ? strtolower( trim( $settings['fonts_method'] ) ) : 'off';
 		$fawesome   = isset( $settings['fawesome_method'] ) && is_string( $settings['fawesome_method'] ) ? strtolower( trim( $settings['fawesome_method'] ) ) : 'off';
+		$delay      = ! empty( $settings['delay_js'] ) && is_array( $settings['delay_js'] );
 
 		if ( ! $minify_js
 			&& ! $minify_css
+			&& ! $delay
 			&& empty( $settings['defer_js'] )
 			&& empty( $settings['async_js'] )
 			&& empty( $settings['remove_print_css'] )
@@ -105,11 +107,16 @@ final class MMF_Assets {
 			);
 		}
 
-		$tokens = MMF_HTML::tokenize( $html );
-		$count  = count( $tokens );
-		$out    = '';
-		$moved  = array();
-		$in_head = false;
+		$delay_seconds = $settings['delay_js_timeout'] ?? 5;
+		$delay_seconds = is_numeric( $delay_seconds ) ? (float) $delay_seconds : 5.0;
+		$delay_timeout = MMF_Loader::normalize_timeout( (int) ( $delay_seconds * 1000 ) );
+
+		$tokens        = MMF_HTML::tokenize( $html );
+		$count         = count( $tokens );
+		$out           = '';
+		$moved         = array();
+		$in_head       = false;
+		$loader_printed = false;
 
 		for ( $index = 0; $index < $count; $index++ ) {
 			$token = $tokens[ $index ];
@@ -202,10 +209,24 @@ final class MMF_Assets {
 					? (string) $tokens[ $close_at ]['raw']
 					: '';
 
+				// A moved placeholder still needs the loader, and the loader has
+				// to stay in the document even when every delayed script moved.
+				if ( ! empty( $result['delay'] ) && ! $loader_printed ) {
+					$out           .= MMF_Loader::script_tag( MMF_Loader::script( MMF_Loader::MODE_INTERACTION, $delay_timeout ) );
+					$loader_printed = true;
+				}
+
 				$moved[] = $result['tag'] . $result['content'] . $close;
 				$index   = $close_at;
 
 				continue;
+			}
+
+			// The loader is printed once, in front of the first placeholder, so
+			// it is parsed before the scripts it has to restore.
+			if ( ! empty( $result['delay'] ) && ! $loader_printed ) {
+				$out           .= MMF_Loader::script_tag( MMF_Loader::script( MMF_Loader::MODE_INTERACTION, $delay_timeout ) );
+				$loader_printed = true;
 			}
 
 			$out  .= $result['tag'];
@@ -307,19 +328,24 @@ final class MMF_Assets {
 			return $result;
 		}
 
-		// External hosts are out of scope: a file we do not control is never
-		// minified, never rewritten and never deferred.
-		if ( ! self::is_local_url( $src ) || ! self::is_js_type( $type ) ) {
+		// A script that is not JavaScript, or that the site excluded, is never
+		// touched - and that includes the delay mode.
+		if ( ! self::is_js_type( $type ) ) {
 			return $result;
 		}
 
-		// An exclusion is hands off: no minification, no rewrite, no async/defer.
-		// `defer_skip` is the narrower switch for "process it, but do not defer".
+		// An exclusion is hands off: no minification, no rewrite, no async/defer,
+		// no delay. `defer_skip` is the narrower switch for "process it, but do
+		// not defer".
 		if ( self::matches( $src, $settings['exclude_js'] ?? array() ) ) {
 			return $result;
 		}
 
-		if ( ! empty( $settings['minify_js'] ) ) {
+		$is_local = self::is_local_url( $src );
+
+		// External files are not minified and not rewritten, but they may still
+		// be delayed: that is the whole point of delaying third-party widgets.
+		if ( $is_local && ! empty( $settings['minify_js'] ) ) {
 			$file = self::prepare_file( $src, 'js' );
 
 			if ( 'failed' === $file['status'] ) {
@@ -335,6 +361,20 @@ final class MMF_Assets {
 
 				$result['stats']['files'] = 1;
 			}
+		}
+
+		// Delay JS: the file and its execution wait for the loader. A delayed
+		// script never gets async/defer - the loader owns its timing.
+		if ( self::should_delay( $src, $settings ) ) {
+			$result['tag']             = self::delay_tag( $tag );
+			$result['delay']           = true;
+			$result['stats']['delayed'] = 1;
+
+			return $result;
+		}
+
+		if ( ! $is_local ) {
+			return $result;
 		}
 
 		$async     = $settings['async_js'] ?? array();
@@ -363,6 +403,57 @@ final class MMF_Assets {
 			&& ! self::has_attribute( $tag, 'async' );
 
 		return $result;
+	}
+
+	/**
+	 * Whether the script belongs to the delay list.
+	 *
+	 * Patterns are the opt-in: an empty list delays nothing. The hard excludes
+	 * (jQuery, wp-i18n, wp-hooks) win over the patterns, so a broad `*` cannot
+	 * break the page's dependencies.
+	 *
+	 * @param string              $src      Script URL.
+	 * @param array<string,mixed> $settings Plugin settings.
+	 */
+	private static function should_delay( string $src, array $settings ): bool {
+		$patterns = $settings['delay_js'] ?? array();
+
+		if ( ! self::matches( $src, $patterns ) ) {
+			return false;
+		}
+
+		if ( self::matches( $src, $settings['delay_js_exclude'] ?? array() ) ) {
+			return false;
+		}
+
+		return ! MMF_Loader::is_hard_excluded( $src );
+	}
+
+	/**
+	 * Turns a tag into a loader placeholder.
+	 *
+	 * The `src` is moved to `data-mmf-src` and the type becomes `text/plain`, so
+	 * the browser neither loads nor executes anything. `async` and `defer` are
+	 * dropped: the loader decides when the file runs.
+	 *
+	 * @param string $tag Full tag.
+	 */
+	private static function delay_tag( string $tag ): string {
+		$attributes = self::attributes( $tag );
+		$src        = isset( $attributes['src'] ) ? (string) $attributes['src'] : '';
+
+		if ( '' === $src ) {
+			return $tag;
+		}
+
+		$tag = self::remove_attribute( $tag, 'src' );
+		$tag = self::remove_attribute( $tag, 'async' );
+		$tag = self::remove_attribute( $tag, 'defer' );
+		$tag = self::replace_attribute( $tag, 'type', 'text/plain' );
+		$tag = self::replace_attribute( $tag, 'data-mmf-src', $src );
+		$tag = self::replace_attribute( $tag, 'data-mmf-delay', '1' );
+
+		return $tag;
 	}
 
 	/**
