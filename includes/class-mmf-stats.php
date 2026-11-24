@@ -64,6 +64,7 @@ final class MMF_Stats {
 			'external_failed'    => 0,
 			'external_removed'   => 0,
 			'font_warnings'      => 0,
+			'fonts_files'        => 0,
 			'last_external'      => array(),
 			'updated'            => 0,
 		);

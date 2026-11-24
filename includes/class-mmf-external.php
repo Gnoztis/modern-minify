@@ -93,6 +93,21 @@ final class MMF_External {
 	);
 
 	/**
+	 * Domain suffixes that are never localised, subdomains included.
+	 *
+	 * A host matches when it IS the suffix or ends with `.` + suffix, so
+	 * `cleantalk.org` covers `api.cleantalk.org` and `fd-api.cleantalk.org`
+	 * while `notcleantalk.org` and `cleantalk.org.evil.com` stay localisable.
+	 * The service also owns a separate registrable domain with a prefix
+	 * (`fd-cleantalk.org`), so that one is listed on its own.
+	 */
+	public const DEFAULT_DOMAINS = array(
+		// Cloud anti-spam: the script checks Origin and Referer.
+		'cleantalk.org',
+		'fd-cleantalk.org',
+	);
+
+	/**
 	 * External hosts seen on the page being rewritten.
 	 *
 	 * @var array<int,array{host:string,status:string}>
@@ -350,6 +365,12 @@ final class MMF_External {
 	 * @param array<string,mixed> $settings Plugin settings.
 	 */
 	private static function is_excluded( string $url, array $settings ): bool {
+		$host = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
+
+		if ( '' !== $host && self::host_is_excluded( $host ) ) {
+			return true;
+		}
+
 		$haystack = strtolower( $url );
 		$filtered = apply_filters( 'mmf_external_excluded', self::DEFAULT_EXCLUDES );
 		$needles  = is_array( $filtered ) ? $filtered : self::DEFAULT_EXCLUDES;
@@ -371,12 +392,55 @@ final class MMF_External {
 
 			$needle = strtolower( trim( (string) $needle ) );
 
-			if ( '' !== $needle && str_contains( $haystack, $needle ) ) {
+			if ( '' === $needle ) {
+				continue;
+			}
+
+			// A user may type a bare domain: compare it to the host, not to the
+			// whole URL, so `cleantalk.org` does not match `notcleantalk.org`.
+			if ( ! str_contains( $needle, '/' ) && false === strpos( $needle, '?' ) && self::host_matches( $host, $needle ) ) {
+				return true;
+			}
+
+			if ( str_contains( $haystack, $needle ) ) {
 				return true;
 			}
 		}
 
 		return false;
+	}
+
+	/**
+	 * Whether a host is on the built-in suffix list.
+	 *
+	 * @param string $host Lowercase host.
+	 */
+	public static function host_is_excluded( string $host ): bool {
+		$host = strtolower( trim( $host ) );
+		$list = apply_filters( 'mmf_external_excluded_domains', self::DEFAULT_DOMAINS );
+		$list = is_array( $list ) ? $list : self::DEFAULT_DOMAINS;
+
+		foreach ( $list as $suffix ) {
+			if ( is_scalar( $suffix ) && self::host_matches( $host, strtolower( trim( (string) $suffix ) ) ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Exact host or a subdomain of it; never a lookalike.
+	 *
+	 * @param string $host   Host to test.
+	 * @param string $suffix Domain suffix.
+	 */
+	private static function host_matches( string $host, string $suffix ): bool {
+		if ( '' === $host || '' === $suffix ) {
+			return false;
+		}
+
+		return $host === $suffix || str_ends_with( $host, '.' . $suffix );
 	}
 
 	/**

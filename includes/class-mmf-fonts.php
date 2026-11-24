@@ -185,6 +185,27 @@ final class MMF_Fonts {
 				return $result;
 			}
 
+			$css     = self::localised_css( $local );
+			$inline  = ! isset( $settings['inline_fonts_css'] ) || ! empty( $settings['inline_fonts_css'] );
+			$too_big = strlen( $css ) > self::MAX_INLINE_CSS || false !== stripos( $css, '</style' );
+
+			// The localised stylesheet is printed in the page by default: a
+			// separate file would be one more request for a few hundred bytes.
+			// A large stylesheet stays a file so the document does not bloat.
+			if ( $inline && '' !== $css && ! $too_big ) {
+				$media = strtolower( trim( (string) ( $attributes['media'] ?? '' ) ) );
+				$id    = isset( $attributes['id'] ) ? ' id="' . esc_attr( (string) $attributes['id'] ) . '"' : '';
+
+				$result['tag']            = '<style' . $id . ( '' !== $media ? ' media="' . esc_attr( $media ) . '"' : '' ) . ' data-mmf-fonts="1">' . $css . '</style>';
+				$result['stats']['fonts'] = 1;
+
+				return $result;
+			}
+
+			if ( $inline && '' !== $css ) {
+				$result['stats']['fonts_files'] = 1;
+			}
+
 			$result['tag']            = MMF_Assets::replace_attribute( $tag, 'href', $local );
 			$result['stats']['fonts'] = 1;
 
@@ -211,6 +232,28 @@ final class MMF_Fonts {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Largest localised stylesheet that is printed inline instead of as a file.
+	 */
+	public const MAX_INLINE_CSS = 51200;
+
+	/**
+	 * Reads the bytes of a localised font stylesheet.
+	 *
+	 * @param string $url Cache URL of the stylesheet.
+	 */
+	private static function localised_css( string $url ): string {
+		$name = basename( (string) wp_parse_url( $url, PHP_URL_PATH ) );
+
+		if ( '' === $name ) {
+			return '';
+		}
+
+		$css = MMF_Cache::read_file( $name );
+
+		return is_string( $css ) ? $css : '';
 	}
 
 	/**

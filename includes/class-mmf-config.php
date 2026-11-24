@@ -53,8 +53,11 @@ final class MMF_Config {
 	 * 9: the master switch is gone (an active plugin is an enabled plugin),
 	 *    Google Fonts default to `local`, and gravatar replacement is on by
 	 *    default (`disable_gravatar`).
+	 * 10: the localised Google Fonts stylesheet is printed inline
+	 *    (`inline_fonts_css`), and the cleantalk.org domain family is never
+	 *    localised.
 	 */
-	public const SCHEMA = 9;
+	public const SCHEMA = 10;
 
 	/**
 	 * Upper bound of one exclusion list, in entries.
@@ -268,6 +271,12 @@ final class MMF_Config {
 				'type'    => 'choice',
 				'default' => 'off',
 				'choices' => array( 'off', 'inline' ),
+			),
+			// Print the localised Google Fonts stylesheet in the page instead of
+			// serving it as one more file. Above the threshold it stays a file.
+			'inline_fonts_css'       => array(
+				'type'    => 'bool',
+				'default' => true,
 			),
 			// Avatars: a gravatar URL sends the visitor's IP and a hash of their
 			// address to a third party, so a local inline SVG is served instead.

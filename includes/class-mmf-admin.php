@@ -48,6 +48,11 @@ final class MMF_Admin {
 	public const TEST_NONCE = 'mmf_toggle_test_mode';
 
 	/**
+	 * Nonce action of the recommended-settings button.
+	 */
+	public const RECOMMENDED_NONCE = 'mmf_recommended_settings';
+
+	/**
 	 * Attaches the screen.
 	 */
 	public static function register_hooks(): void {
@@ -55,6 +60,97 @@ final class MMF_Admin {
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue' ) );
 		add_action( 'admin_init', array( __CLASS__, 'handle_reset' ) );
 		add_action( 'admin_init', array( __CLASS__, 'handle_toggle_test' ) );
+		add_action( 'admin_init', array( __CLASS__, 'handle_apply_recommended' ) );
+	}
+
+	/**
+	 * The recommended profile: the safe, useful subset of the options.
+	 *
+	 * The risky features stay off on purpose. User exclusions and pattern lists
+	 * are not part of the profile, with one exception: Delay JS is controlled
+	 * only by its pattern list, so "Delay JS off" means clearing that list.
+	 *
+	 * @return array<string,mixed>
+	 */
+	public static function recommended_profile(): array {
+		return array(
+			'minify_html'      => true,
+			'minify_css'       => true,
+			'minify_js'        => true,
+			'minify_inline'    => true,
+			'fonts_method'     => 'local',
+			'fawesome_method'  => 'inline',
+			'disable_gravatar' => true,
+			'ver_mode'         => 'hash',
+			'remove_emoji'     => true,
+			'external_mode'    => 'local',
+			'merge_js'         => false,
+			'merge_css'        => false,
+			'delay_js'         => array(),
+			'rocket_mode'      => false,
+			'defer_external'   => false,
+		);
+	}
+
+	/**
+	 * Human-readable list of what the profile changes.
+	 *
+	 * @return string[]
+	 */
+	public static function recommended_labels(): array {
+		return array(
+			__( 'Минификация HTML, CSS и JS — включить', 'modern-minify' ),
+			__( 'Минификация инлайн-блоков — включить', 'modern-minify' ),
+			__( 'Google Fonts — скачивать локально', 'modern-minify' ),
+			__( 'Font Awesome — встроить CSS', 'modern-minify' ),
+			__( 'Граватары — заменить локальной заглушкой', 'modern-minify' ),
+			__( 'Версии файлов — хеш содержимого', 'modern-minify' ),
+			__( 'Emoji — удалять', 'modern-minify' ),
+			__( 'Внешние файлы — локально', 'modern-minify' ),
+			__( 'Объединение файлов — выключить', 'modern-minify' ),
+			__( 'Delay JS — выключить (список шаблонов будет очищен)', 'modern-minify' ),
+			__( 'Rocket-режим — выключить', 'modern-minify' ),
+			__( 'defer для внешних — выключить', 'modern-minify' ),
+			__( 'Не изменяются: исключения, шаблоны async/defer, лимиты, TTL, тестовый режим.', 'modern-minify' ),
+		);
+	}
+
+	/**
+	 * Applies the recommended profile and resets the cache.
+	 */
+	public static function handle_apply_recommended(): void {
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( (string) $_GET['page'] ) ) : '';
+
+		if ( self::PAGE !== $page ) {
+			return;
+		}
+
+		$action = isset( $_GET['action'] ) ? sanitize_key( wp_unslash( (string) $_GET['action'] ) ) : '';
+
+		if ( 'mmf_recommended' !== $action ) {
+			return;
+		}
+
+		if ( ! current_user_can( self::CAPABILITY ) ) {
+			return;
+		}
+
+		check_admin_referer( self::RECOMMENDED_NONCE );
+
+		MMF_Config::update( self::recommended_profile() );
+		$deleted = MMF_Cache::delete_all();
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'            => self::PAGE,
+					'mmf-recommended' => '1',
+					'mmf-reset'       => $deleted,
+				),
+				admin_url( 'options-general.php' )
+			)
+		);
+		exit;
 	}
 
 	/**
@@ -214,6 +310,10 @@ final class MMF_Admin {
 				self::render_external_exclusions();
 			}
 
+			if ( 'settings' === $slug ) {
+				self::render_html_note();
+			}
+
 			echo '</div>';
 		}
 		submit_button();
@@ -250,7 +350,7 @@ final class MMF_Admin {
 			'status'     => array(),
 			'javascript' => array( 'minify_js', 'merge_js', 'async_js', 'defer_js', 'defer_external', 'defer_skip', 'exclude_js', 'move_scripts_to_footer', 'delay_js', 'delay_js_exclude', 'delay_js_timeout', 'rocket_mode', 'rocket_exclude' ),
 			'css'        => array( 'minify_css', 'merge_css', 'inline_css', 'inline_css_limit', 'remove_print_css', 'exclude_css' ),
-			'fonts'      => array( 'fonts_method', 'fawesome_method' ),
+			'fonts'      => array( 'fonts_method', 'fawesome_method', 'inline_fonts_css' ),
 			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_generator', 'remove_emoji', 'ver_mode' ),
 			'advanced'   => array( 'cache_ttl', 'test_mode', 'debug', 'external_mode', 'external_max_size', 'merge_max_files', 'merge_max_size', 'disable_gravatar' ),
 		);
@@ -354,6 +454,10 @@ final class MMF_Admin {
 			'fawesome_method'        => array(
 				__( 'Font Awesome', 'modern-minify' ),
 				__( 'Встроить CSS в страницу; адреса шрифтов остаются абсолютными.', 'modern-minify' ),
+			),
+			'inline_fonts_css'       => array(
+				__( 'CSS шрифтов инлайном', 'modern-minify' ),
+				__( 'Локализованный CSS Google Fonts печатается в <style>, а не отдельным файлом. Больше 50 КБ — остаётся файлом, чтобы не раздувать HTML.', 'modern-minify' ),
 			),
 			'minify_html'            => array(
 				__( 'Минифицировать HTML', 'modern-minify' ),
@@ -579,6 +683,7 @@ final class MMF_Admin {
 				__( 'Не удалось скачать', 'modern-minify' )       => (string) (int) $stats['external_failed'],
 				__( 'Тегов удалено', 'modern-minify' )            => (string) (int) $stats['external_removed'],
 				__( 'Предупреждений о шрифтах', 'modern-minify' ) => (string) (int) $stats['font_warnings'],
+				__( 'CSS шрифтов отдано файлом', 'modern-minify' ) => (string) (int) $stats['fonts_files'],
 				__( 'Аватаров заменено', 'modern-minify' )        => (string) (int) $stats['gravatar'],
 			)
 		);
@@ -616,6 +721,48 @@ final class MMF_Admin {
 		);
 
 		echo '<p class="mmf-actions"><a class="button mmf-reset" href="' . esc_url( $reset_url ) . '">' . esc_html__( 'Сбросить кеш', 'modern-minify' ) . '</a></p>';
+
+		self::render_recommended();
+	}
+
+	/**
+	 * Prints the recommended-settings block.
+	 */
+	private static function render_recommended(): void {
+		$labels = self::recommended_labels();
+
+		$recommended_url = wp_nonce_url(
+			add_query_arg(
+				array(
+					'page'   => self::PAGE,
+					'action' => 'mmf_recommended',
+				),
+				admin_url( 'options-general.php' )
+			),
+			self::RECOMMENDED_NONCE
+		);
+
+		printf(
+			'<p class="description">%s</p>',
+			esc_html__( 'Безопасный набор для обычного сайта: включает минификацию, локальные шрифты и граватары, выключает рискованные режимы.', 'modern-minify' )
+		);
+
+		echo '<details class="mmf-recommended-box"><summary>' . esc_html__( 'Что изменится', 'modern-minify' ) . '</summary><ul>';
+
+		foreach ( $labels as $label ) {
+			echo '<li>' . esc_html( $label ) . '</li>';
+		}
+
+		echo '</ul></details>';
+
+		echo '<p class="mmf-actions"><a class="button button-secondary mmf-recommended" href="' . esc_url( $recommended_url ) . '" data-confirm="' . esc_attr( implode( '; ', $labels ) ) . '">' . esc_html__( 'Применить рекомендуемые настройки', 'modern-minify' ) . '</a></p>';
+	}
+
+	/**
+	 * Explains what is written to disk and what is not.
+	 */
+	private static function render_html_note(): void {
+		echo '<p class="description mmf-html-note">' . esc_html__( 'HTML сжимается на лету, файлы не создаются. CSS и JS копируются в uploads/mmf/ один раз на каждую версию файла — иначе их пришлось бы сжимать на каждом запросе. Копии удаляются по TTL и при удалении плагина.', 'modern-minify' ) . '</p>';
 	}
 
 	/**
@@ -806,6 +953,15 @@ final class MMF_Admin {
 
 		$reasons = self::external_reasons();
 
+		foreach ( MMF_External::DEFAULT_DOMAINS as $suffix ) {
+			$suffix = (string) $suffix;
+			$reason = isset( $reasons[ $suffix ] ) ? $reasons[ $suffix ] : __( 'Привязан к домену сайта.', 'modern-minify' );
+
+			echo '<tr><td><code>' . esc_html( $suffix ) . '</code><br /><span class="description">' . esc_html__( 'домен и поддомены', 'modern-minify' ) . '</span></td>';
+			echo '<td>' . esc_html( $reason ) . '</td>';
+			echo '<td><input type="checkbox" checked="checked" disabled="disabled" /></td></tr>';
+		}
+
 		foreach ( MMF_External::DEFAULT_EXCLUDES as $needle ) {
 			$needle = (string) $needle;
 			$reason = isset( $reasons[ $needle ] ) ? $reasons[ $needle ] : __( 'Привязан к домену сайта.', 'modern-minify' );
@@ -862,6 +1018,8 @@ final class MMF_Admin {
 			'securepay.tinkoff'        => __( 'Платёжный виджет: зарегистрирован для одного домена.', 'modern-minify' ),
 			'yookassa'                 => __( 'Платёжный виджет: зарегистрирован для одного домена.', 'modern-minify' ),
 			'money.yandex'             => __( 'Платёжный виджет: зарегистрирован для одного домена.', 'modern-minify' ),
+			'cleantalk.org'            => __( 'Облачная защита, проверяет домен запроса.', 'modern-minify' ),
+			'fd-cleantalk.org'         => __( 'Облачная защита, проверяет домен запроса.', 'modern-minify' ),
 		);
 	}
 
@@ -878,6 +1036,13 @@ final class MMF_Admin {
 
 			/* translators: %d: number of deleted files. */
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html( sprintf( __( 'Кеш очищен, удалено файлов: %d.', 'modern-minify' ), $deleted ) ) . '</p></div>';
+		}
+
+		if ( isset( $_GET['mmf-recommended'] ) ) {
+			$deleted = isset( $_GET['mmf-reset'] ) ? (int) sanitize_text_field( wp_unslash( (string) $_GET['mmf-reset'] ) ) : 0;
+
+			/* translators: %d: number of deleted files. */
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html( sprintf( __( 'Рекомендуемые настройки применены, кеш сброшен (удалено файлов: %d).', 'modern-minify' ), $deleted ) ) . '</p></div>';
 		}
 
 		if ( MMF_Conflicts::is_active() ) {
@@ -967,6 +1132,10 @@ final class MMF_Admin {
 		return '(function(){var links=document.querySelectorAll(".mmf-reset");'
 			. 'for(var i=0;i<links.length;i++){links[i].addEventListener("click",function(event){'
 			. 'if(!window.confirm(' . $prompt . ')){event.preventDefault();}});}'
+			. 'var rec=document.querySelectorAll(".mmf-recommended");'
+			. 'for(var r=0;r<rec.length;r++){rec[r].addEventListener("click",function(event){'
+			. 'var text=this.getAttribute("data-confirm")||"";'
+			. 'if(text&&!window.confirm(text)){event.preventDefault();}});}'
 			. 'var rows=document.querySelectorAll(".mmf-exclude-row");'
 			. 'for(var j=0;j<rows.length;j++){(function(row){'
 			. 'var box=row.querySelector(".mmf-exclude-keep"),input=row.querySelector("input[type=text]");'
