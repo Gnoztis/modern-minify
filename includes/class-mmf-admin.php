@@ -2329,9 +2329,12 @@ final class MMF_Admin {
 			$links[] = '<a class="button button-small" href="' . esc_url( $url( 'inline', $pattern ) ) . '">' . esc_html__( 'Встроить', 'modern-minify' ) . '</a>';
 		}
 
-		if ( in_array( (string) ( $item['reason'] ?? '' ), array( 'css-widget', 'css-plugin' ), true ) ) {
+		// Asynchronous loading is offered for every non-theme stylesheet: a
+		// small plugin file is exactly what people want out of the critical
+		// path, and the theme sheet is refused earlier by handle_css_action().
+		if ( false === strpos( (string) $item['url'], '/themes/' ) ) {
 			if ( MMF_Advisor::async_css_available() ) {
-				$links[] = '<a class="button button-small mmf-async-css" href="' . esc_url( $url( 'async', $pattern ) ) . '">' . esc_html__( 'Асинхронно', 'modern-minify' ) . '</a>';
+				$links[] = '<a class="button button-small mmf-async-css" title="' . esc_attr__( 'Убрать файл из критического пути и загрузить после отрисовки; возможен краткий скачок оформления', 'modern-minify' ) . '" href="' . esc_url( $url( 'async', $pattern ) ) . '">' . esc_html__( 'Отложить загрузку', 'modern-minify' ) . '</a>';
 			} else {
 				$links[] = '<span class="description">' . esc_html__( 'асинхронно недоступно: CSP без nonce для инлайн-скрипта', 'modern-minify' ) . '</span>';
 			}
