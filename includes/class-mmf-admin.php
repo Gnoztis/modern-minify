@@ -2076,7 +2076,16 @@ final class MMF_Admin {
 
 			echo '<tr><td><span class="mmf-advisor__name">' . esc_html( (string) $item['name'] ) . '</span> <span class="mmf-advisor__path" title="' . esc_attr( (string) $item['url'] ) . '">' . esc_html( (string) $item['url'] ) . '</span><p class="mmf-advisor__reason">' . esc_html( MMF_Advisor::reason_label( (string) $item['reason'] ) ) . '</p></td>';
 			echo '<td class="mmf-advisor__size">' . esc_html( $size ) . '</td>';
-			echo '<td><span class="mmf-verdict mmf-verdict--' . esc_attr( (string) $item['verdict'] ) . '">' . esc_html( MMF_Advisor::verdict_label( (string) $item['verdict'] ) ) . '</span></td>';
+			$css_reason = (string) ( $item['reason'] ?? '' );
+			$css_labels = array(
+				'css-inline'   => __( 'можно встроить', 'modern-minify' ),
+				'css-widget'   => __( 'можно асинхронно', 'modern-minify' ),
+				'css-plugin'   => __( 'рискованно', 'modern-minify' ),
+				'css-theme'    => __( 'нельзя', 'modern-minify' ),
+				'css-unknown'  => __( 'неизвестно', 'modern-minify' ),
+			);
+			$css_label = $css_labels[ $css_reason ] ?? MMF_Advisor::verdict_label( (string) $item['verdict'] );
+			echo '<td><span class="mmf-verdict mmf-verdict--' . esc_attr( (string) $item['verdict'] ) . '">' . esc_html( $css_label ) . '</span></td>';
 			echo '<td class="mmf-advisor__actions">' . self::css_action_links( $item ) . '</td></tr>';
 		}
 
@@ -2123,7 +2132,28 @@ final class MMF_Admin {
 
 		$links[] = '<a class="button button-small" href="' . esc_url( $url( 'exclude', $pattern ) ) . '">' . esc_html__( 'Исключить', 'modern-minify' ) . '</a>';
 
-		return implode( ' ', $links );
+		if ( array() === $links ) {
+			return '<span class="description">—</span>';
+		}
+
+		$primary = array_shift( $links );
+		$primary = str_replace( '<a ', '<a title="' . esc_attr__( 'Применить это действие к оригинальному файлу', 'modern-minify' ) . '" ', $primary );
+		$menu    = '';
+
+		$links = array_map(
+			static function ( $link ) {
+				return str_replace( 'class="button button-small', 'class="mmf-menu__item', $link );
+			},
+			$links
+		);
+
+		if ( array() !== $links ) {
+			$menu = '<button type="button" class="button button-small mmf-menu-toggle" aria-expanded="false" aria-label="' . esc_attr__( 'Другие действия', 'modern-minify' ) . '">⋯</button><div class="mmf-menu" hidden>' . implode( '', $links ) . '</div>';
+		} else {
+			$menu = '<button type="button" class="button button-small mmf-menu-toggle" aria-expanded="false" disabled="disabled" aria-label="' . esc_attr__( 'Других действий нет', 'modern-minify' ) . '">⋯</button>';
+		}
+
+		return '<span class="mmf-actions-wrap">' . $primary . $menu . '</span>';
 	}
 
 	/**
@@ -2585,6 +2615,10 @@ final class MMF_Admin {
 .mmf-wrap .mmf-source{display:inline-block;padding:1px 6px;border-radius:999px;background:var(--mmf-surface);border:1px solid var(--mmf-border);color:var(--mmf-muted);font-size:11px;white-space:nowrap}
 .mmf-wrap .mmf-source--external{background:#eef4fb;color:#0b4a7a;border-color:#b6d3ea}
 .mmf-wrap .mmf-source--external-known{background:var(--mmf-warn-bg);color:#7a4b00;border-color:#e6d9a8}
+.mmf-wrap .mmf-actions-wrap{display:inline-flex;gap:4px;align-items:center;position:relative;white-space:nowrap}
+.mmf-wrap .mmf-menu{position:absolute;top:100%;right:0;z-index:100;min-width:150px;background:var(--mmf-popover-bg);border:1px solid var(--mmf-border);border-radius:var(--mmf-radius);box-shadow:0 4px 12px rgba(0,0,0,.08);padding:4px;display:flex;flex-direction:column;gap:2px}
+.mmf-wrap .mmf-menu__item{display:block;padding:6px 8px;border-radius:4px;text-decoration:none;color:var(--mmf-popover-fg);white-space:nowrap}
+.mmf-wrap .mmf-menu__item:hover,.mmf-wrap .mmf-menu__item:focus{background:var(--mmf-surface)}
 .mmf-wrap .mmf-advisor-action{white-space:nowrap;display:inline-flex;gap:4px;align-items:center}
 @media (max-width:900px){.mmf-wrap .mmf-advisor-scroll{overflow:visible}.mmf-wrap .mmf-advisor-table{display:block;min-width:0}.mmf-wrap .mmf-advisor-table thead{display:none}.mmf-wrap .mmf-advisor-table tbody,.mmf-wrap .mmf-advisor-table tr,.mmf-wrap .mmf-advisor-table td{display:block;width:auto}.mmf-wrap .mmf-advisor-table tr{border:1px solid var(--mmf-border);border-radius:var(--mmf-radius);padding:8px;margin:0 0 8px}.mmf-wrap .mmf-advisor-table td{border:0;height:auto;max-height:none;padding:2px 0}}
 .mmf-wrap .mmf-advisor__summary{font-weight:600}
@@ -2755,6 +2789,10 @@ var adviceButton=document.querySelector("button[name=\"mmf_apply_advice\"]");
 if(adviceButton){adviceButton.addEventListener("click",function(event){var risky=document.querySelectorAll(".mmf-advice-risky:checked");if(!risky.length){return}var key="mmfAdviceRisky";try{if(window.sessionStorage.getItem(key)){return}window.sessionStorage.setItem(key,"1");}catch(e){}if(!window.confirm(__MMF_ADVICE_RISKY_PROMPT__)){event.preventDefault();}});}
 var asyncLinks=document.querySelectorAll(".mmf-async-css");
 for(var ai=0;ai<asyncLinks.length;ai++){asyncLinks[ai].addEventListener("click",function(event){if(!window.confirm(__MMF_ASYNC_CSS_PROMPT__)){event.preventDefault();}});}
+var menuButtons=document.querySelectorAll(".mmf-menu-toggle");
+for(var mi=0;mi<menuButtons.length;mi++){menuButtons[mi].addEventListener("click",function(event){event.stopPropagation();var menu=this.nextElementSibling;if(!menu){return}var open=menu.hidden;menu.hidden=!open;this.setAttribute("aria-expanded",open?"true":"false");});}
+document.addEventListener("click",function(event){for(var k=0;k<menuButtons.length;k++){var m=menuButtons[k].nextElementSibling;if(m&&!m.hidden&&!m.contains(event.target)){m.hidden=true;menuButtons[k].setAttribute("aria-expanded","false");}}});
+document.addEventListener("keydown",function(event){if("Escape"!==event.key){return}for(var k=0;k<menuButtons.length;k++){var m=menuButtons[k].nextElementSibling;if(m&&!m.hidden){m.hidden=true;menuButtons[k].setAttribute("aria-expanded","false");menuButtons[k].focus();}}});
 var exampleButtons=document.querySelectorAll(".mmf-examples-toggle");
 for(var ei=0;ei<exampleButtons.length;ei++){exampleButtons[ei].addEventListener("click",function(){var box=document.getElementById(this.getAttribute("aria-controls"));if(!box){return}var open=!box.hidden;box.hidden=open;this.setAttribute("aria-expanded",open?"false":"true");});}
 var avatarsButton=document.querySelector(".mmf-convert-avatars");
