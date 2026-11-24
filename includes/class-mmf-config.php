@@ -56,8 +56,10 @@ final class MMF_Config {
 	 * 10: the localised Google Fonts stylesheet is printed inline
 	 *    (`inline_fonts_css`), and the cleantalk.org domain family is never
 	 *    localised.
+	 * 11: jQuery Migrate is deregistered on the front end by default, and
+	 *    `defer_js` became all-or-nothing.
 	 */
-	public const SCHEMA = 10;
+	public const SCHEMA = 11;
 
 	/**
 	 * Upper bound of one exclusion list, in entries.
@@ -274,6 +276,12 @@ final class MMF_Config {
 			),
 			// Print the localised Google Fonts stylesheet in the page instead of
 			// serving it as one more file. Above the threshold it stays a file.
+			// jQuery Migrate is legacy: modern themes do not need it, and it is a
+			// separate request plus console noise. Front-end only.
+			'remove_jquery_migrate'  => array(
+				'type'    => 'bool',
+				'default' => true,
+			),
 			'inline_fonts_css'       => array(
 				'type'    => 'bool',
 				'default' => true,

@@ -61,51 +61,68 @@ final class MMF_External {
 	private const NEGATIVE_TTL = 300;
 
 	/**
-	 * Hosts whose scripts are bound to the site's domain.
+	 * Built-in host exclusions: host suffix => reason key.
 	 *
-	 * They validate the Referer or the Origin against the registered domain, so
-	 * a local copy is a broken widget. The list is matched as a substring of
-	 * the URL and can be extended or replaced with the
-	 * `mmf_external_excluded` filter.
+	 * One source of truth: the interface renders this array and `host_is_excluded()`
+	 * applies it, so the table can never promise an exclusion the engine does not
+	 * make. A host matches itself and every subdomain, never a lookalike:
+	 * `yoomoney.ru` covers `www.yoomoney.ru` and `3dsec-payments.yookassa.ru` is
+	 * covered by `yookassa.ru`, while `notyoomoney.ru` and
+	 * `yoomoney.ru.evil.com` are not matched.
 	 */
-	public const DEFAULT_EXCLUDES = array(
-		// Maps: the key is validated against the Referer.
-		'maps.googleapis.com',
-		'maps.google.com',
-		'maps.yandex',
-		'api-maps.yandex',
-		'api.mapbox.com',
-		'api.2gis',
+	public const BUILTIN = array(
+		// Cloud anti-spam: the script checks Origin and Referer.
+		'cleantalk.org'             => 'antispam',
+		'fd-cleantalk.org'          => 'antispam-service',
 		// Captchas: the widget checks the Origin.
-		'recaptcha',
-		'hcaptcha.com',
-		'challenges.cloudflare.com',
-		'turnstile',
-		// Payments: the widget is registered for one domain.
-		'js.stripe.com',
-		'checkout.stripe.com',
-		'paypal.com/sdk',
-		'paypalobjects.com',
-		'checkout.qiwi.com',
-		'securepay.tinkoff',
-		'yookassa',
-		'money.yandex',
+		'www.google.com'            => 'captcha',
+		'recaptcha.net'             => 'captcha',
+		'hcaptcha.com'              => 'captcha',
+		'challenges.cloudflare.com' => 'captcha',
+		// Russian payments and wallets: the widget is bound to the domain.
+		'yoomoney.ru'               => 'payments-ru',
+		'money.yandex.ru'           => 'payments-ru-legacy',
+		'money.yandex.net'          => 'payments-ru-legacy',
+		'yookassa.ru'               => 'payments-ru',
+		'securepay.tinkoff.ru'      => 'payments-ru',
+		'checkout.qiwi.com'         => 'payments-ru',
+		// International payments.
+		'js.stripe.com'             => 'payments',
+		'checkout.stripe.com'       => 'payments',
+		'paypal.com'                => 'payments',
+		'paypalobjects.com'         => 'payments',
+		// Maps: the key is bound to the domain.
+		'maps.googleapis.com'       => 'maps',
+		'api-maps.yandex.ru'        => 'maps',
 	);
 
 	/**
-	 * Domain suffixes that are never localised, subdomains included.
+	 * Built-in host suffixes, derived from `BUILTIN`.
 	 *
-	 * A host matches when it IS the suffix or ends with `.` + suffix, so
-	 * `cleantalk.org` covers `api.cleantalk.org` and `fd-api.cleantalk.org`
-	 * while `notcleantalk.org` and `cleantalk.org.evil.com` stay localisable.
-	 * The service also owns a separate registrable domain with a prefix
-	 * (`fd-cleantalk.org`), so that one is listed on its own.
+	 * @return string[]
 	 */
-	public const DEFAULT_DOMAINS = array(
-		// Cloud anti-spam: the script checks Origin and Referer.
-		'cleantalk.org',
-		'fd-cleantalk.org',
-	);
+	public static function domains(): array {
+		return array_keys( self::BUILTIN );
+	}
+
+	/**
+	 * Translatable reason of a built-in entry.
+	 *
+	 * @param string $reason Reason key from `BUILTIN`.
+	 */
+	public static function reason_label( string $reason ): string {
+		$labels = array(
+			'antispam'         => __( 'Облачная защита, проверяет домен запроса.', 'modern-minify' ),
+			'antispam-service' => __( 'Отдельный домен сервиса защиты.', 'modern-minify' ),
+			'captcha'          => __( 'Капча: виджет проверяет Origin.', 'modern-minify' ),
+			'payments-ru'      => __( 'Платёжный виджет привязан к домену.', 'modern-minify' ),
+			'payments-ru-legacy' => __( 'Старый адрес ЮMoney, ещё редиректит.', 'modern-minify' ),
+			'payments'         => __( 'Платёжный виджет: ключ привязан к домену.', 'modern-minify' ),
+			'maps'             => __( 'API карт: ключ привязан к домену.', 'modern-minify' ),
+		);
+
+		return isset( $labels[ $reason ] ) ? $labels[ $reason ] : __( 'Привязан к домену сайта.', 'modern-minify' );
+	}
 
 	/**
 	 * External hosts seen on the page being rewritten.
@@ -372,8 +389,8 @@ final class MMF_External {
 		}
 
 		$haystack = strtolower( $url );
-		$filtered = apply_filters( 'mmf_external_excluded', self::DEFAULT_EXCLUDES );
-		$needles  = is_array( $filtered ) ? $filtered : self::DEFAULT_EXCLUDES;
+		$filtered = apply_filters( 'mmf_external_excluded', array() );
+		$needles  = is_array( $filtered ) ? $filtered : array();
 
 		$extra = $settings['external_exclude'] ?? array();
 
@@ -417,8 +434,8 @@ final class MMF_External {
 	 */
 	public static function host_is_excluded( string $host ): bool {
 		$host = strtolower( trim( $host ) );
-		$list = apply_filters( 'mmf_external_excluded_domains', self::DEFAULT_DOMAINS );
-		$list = is_array( $list ) ? $list : self::DEFAULT_DOMAINS;
+		$list = apply_filters( 'mmf_external_excluded_domains', self::domains() );
+		$list = is_array( $list ) ? $list : self::domains();
 
 		foreach ( $list as $suffix ) {
 			if ( is_scalar( $suffix ) && self::host_matches( $host, strtolower( trim( (string) $suffix ) ) ) ) {

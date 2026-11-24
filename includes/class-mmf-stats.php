@@ -30,6 +30,14 @@ final class MMF_Stats {
 	public const OPTION = 'mmf_stats';
 
 	/**
+	 * Option holding the last action shown on the status screen.
+	 *
+	 * A toast disappears; the result of an action must also survive somewhere
+	 * permanent, so this record is what the status card reads.
+	 */
+	public const ACTION_OPTION = 'mmf_last_action';
+
+	/**
 	 * Seconds between two writes.
 	 */
 	private const THROTTLE = 60;
@@ -66,6 +74,8 @@ final class MMF_Stats {
 			'font_warnings'      => 0,
 			'fonts_files'        => 0,
 			'last_external'      => array(),
+			'last_scripts'       => array(),
+			'last_defer'         => array( 'allowed' => false, 'reason' => '', 'blockers' => array() ),
 			'updated'            => 0,
 		);
 	}
@@ -92,6 +102,10 @@ final class MMF_Stats {
 
 			if ( 'last_external' === $key ) {
 				$known[ $key ] = self::sanitize_report( $value );
+			} elseif ( 'last_scripts' === $key ) {
+				$known[ $key ] = self::sanitize_scripts( $value );
+			} elseif ( 'last_defer' === $key ) {
+				$known[ $key ] = self::sanitize_defer( $value );
 			} elseif ( is_bool( $value ) ) {
 				$known[ $key ] = (int) $value;
 			} elseif ( is_numeric( $value ) ) {
@@ -122,6 +136,16 @@ final class MMF_Stats {
 				continue;
 			}
 
+			if ( 'last_scripts' === $key ) {
+				$clean[ $key ] = self::sanitize_scripts( $count );
+				continue;
+			}
+
+			if ( 'last_defer' === $key ) {
+				$clean[ $key ] = self::sanitize_defer( $count );
+				continue;
+			}
+
 			if ( is_scalar( $count ) && is_numeric( $count ) && (int) $count > 0 ) {
 				$clean[ $key ] = (int) $count;
 			}
@@ -139,7 +163,7 @@ final class MMF_Stats {
 		}
 
 		foreach ( $clean as $key => $count ) {
-			if ( 'last_delayed' === $key || 'last_external' === $key ) {
+			if ( 'last_delayed' === $key || 'last_external' === $key || 'last_scripts' === $key || 'last_defer' === $key ) {
 				// Snapshots of the last counted page, not running totals.
 				$stats[ $key ] = $count;
 				continue;
@@ -154,6 +178,73 @@ final class MMF_Stats {
 
 		// Not autoloaded: read once on the admin screen, never on a page view.
 		update_option( self::OPTION, $stats, false );
+	}
+
+	/**
+	 * Normalises the script list of the last page.
+	 *
+	 * @param mixed $value Raw stored or reported value.
+	 * @return array<int,array{name:string,mode:string,position:int}>
+	 */
+	private static function sanitize_scripts( $value ): array {
+		if ( ! is_array( $value ) ) {
+			return array();
+		}
+
+		$modes = array( 'normal', 'defer', 'async', 'delayed', 'inline', 'rocket' );
+		$list  = array();
+
+		foreach ( $value as $entry ) {
+			if ( ! is_array( $entry ) ) {
+				continue;
+			}
+
+			$name = isset( $entry['name'] ) && is_string( $entry['name'] ) ? sanitize_text_field( $entry['name'] ) : '';
+			$mode = isset( $entry['mode'] ) && is_string( $entry['mode'] ) ? sanitize_key( $entry['mode'] ) : '';
+
+			if ( ! in_array( $mode, $modes, true ) ) {
+				$mode = 'normal';
+			}
+
+			$list[] = array(
+				'name'     => mb_substr( $name, 0, 200 ),
+				'mode'     => $mode,
+				'position' => isset( $entry['position'] ) && is_numeric( $entry['position'] ) ? (int) $entry['position'] : count( $list ) + 1,
+			);
+
+			if ( count( $list ) >= 100 ) {
+				break;
+			}
+		}
+
+		return $list;
+	}
+
+	/**
+	 * Normalises the defer decision of the last page.
+	 *
+	 * @param mixed $value Raw stored or reported value.
+	 * @return array{allowed:bool,reason:string,blockers:string[]}
+	 */
+	private static function sanitize_defer( $value ): array {
+		$value    = is_array( $value ) ? $value : array();
+		$blockers = array();
+
+		foreach ( (array) ( $value['blockers'] ?? array() ) as $blocker ) {
+			if ( is_string( $blocker ) && '' !== trim( $blocker ) ) {
+				$blockers[] = sanitize_text_field( $blocker );
+			}
+
+			if ( count( $blockers ) >= 10 ) {
+				break;
+			}
+		}
+
+		return array(
+			'allowed'  => ! empty( $value['allowed'] ),
+			'reason'   => isset( $value['reason'] ) && is_string( $value['reason'] ) ? sanitize_text_field( $value['reason'] ) : '',
+			'blockers' => $blockers,
+		);
 	}
 
 	/**
@@ -199,5 +290,46 @@ final class MMF_Stats {
 	 */
 	public static function reset(): void {
 		delete_option( self::OPTION );
+		delete_option( self::ACTION_OPTION );
+	}
+
+	/**
+	 * Remembers the last action, so its result survives the toast.
+	 *
+	 * @param string $message Human-readable result.
+	 */
+	public static function record_action( string $message ): void {
+		$message = trim( sanitize_text_field( $message ) );
+
+		if ( '' === $message ) {
+			return;
+		}
+
+		update_option(
+			self::ACTION_OPTION,
+			array(
+				'message' => mb_substr( $message, 0, 300 ),
+				'time'    => time(),
+			),
+			false
+		);
+	}
+
+	/**
+	 * The last recorded action.
+	 *
+	 * @return array{message:string,time:int}
+	 */
+	public static function last_action(): array {
+		$stored = get_option( self::ACTION_OPTION, array() );
+		$stored = is_array( $stored ) ? $stored : array();
+
+		$message = isset( $stored['message'] ) && is_string( $stored['message'] ) ? sanitize_text_field( $stored['message'] ) : '';
+		$time    = isset( $stored['time'] ) && is_numeric( $stored['time'] ) ? (int) $stored['time'] : 0;
+
+		return array(
+			'message' => $message,
+			'time'    => $time,
+		);
 	}
 }

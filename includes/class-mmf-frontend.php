@@ -75,6 +75,25 @@ final class MMF_Frontend {
 	public function register_hooks(): void {
 		// Priority 1: headers are not sent yet and the template has not run.
 		add_action( 'template_redirect', array( $this, 'maybe_start' ), 1 );
+
+		// Late on the front end, after every plugin has registered its scripts.
+		add_action( 'wp_enqueue_scripts', array( $this, 'drop_jquery_migrate' ), 100 );
+	}
+
+	/**
+	 * Removes jQuery Migrate from the front end.
+	 *
+	 * Modern themes do not need it, and it is both a request and console noise.
+	 * The admin is untouched: old plugin screens may still rely on it.
+	 */
+	public function drop_jquery_migrate(): void {
+		if ( ! MMF_Config::get( 'remove_jquery_migrate' ) ) {
+			return;
+		}
+
+		if ( function_exists( 'wp_deregister_script' ) ) {
+			wp_deregister_script( 'jquery-migrate' );
+		}
 	}
 
 	/**
@@ -238,6 +257,9 @@ final class MMF_Frontend {
 			$stats['last_external'] = is_array( $assets['stats']['external_report'] ?? null )
 				? $assets['stats']['external_report']
 				: array();
+
+			$stats['last_scripts'] = is_array( $assets['stats']['last_scripts'] ?? null ) ? $assets['stats']['last_scripts'] : array();
+			$stats['last_defer']   = is_array( $assets['stats']['last_defer'] ?? null ) ? $assets['stats']['last_defer'] : array();
 
 			// `get_avatar` runs while the page is rendered, before this buffer is
 			// processed, so the counter already holds the page's number.

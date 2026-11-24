@@ -110,6 +110,11 @@ final class MMF_Assets {
 
 		$rocket = '' !== $rocket_js;
 
+		// `defer_js` is all-or-nothing: if one external script would stay in
+		// the normal flow, deferring the rest reorders the page.
+		$defer_state = self::defer_state( $html, $settings );
+		$defer_all   = ! empty( $defer_state['allowed'] );
+
 		if ( ! $minify_js
 			&& ! $minify_css
 			&& ! $delay
@@ -152,6 +157,7 @@ final class MMF_Assets {
 		$loader_printed = false;
 		$rocket_used    = false;
 		$rocket_printed = false;
+		$scripts        = array();
 
 		for ( $index = 0; $index < $count; $index++ ) {
 			$token = $tokens[ $index ];
@@ -233,9 +239,9 @@ final class MMF_Assets {
 			}
 
 			$result = self::safely(
-				static function () use ( $token, $content, $settings, $rocket ) {
+				static function () use ( $token, $content, $settings, $rocket, $defer_all ) {
 					return 'script' === $token['name']
-						? self::process_script( (string) $token['raw'], $content, $settings, $rocket )
+						? self::process_script( (string) $token['raw'], $content, $settings, $rocket, $defer_all )
 						: self::process_style( (string) $token['raw'], $content, $settings );
 				},
 				array(
@@ -247,6 +253,14 @@ final class MMF_Assets {
 
 			if ( ! empty( $result['rocket'] ) ) {
 				$rocket_used = true;
+			}
+
+			if ( 'script' === $name && '' !== (string) ( $result['tag'] ?? '' ) ) {
+				$scripts[] = array(
+					'name'     => (string) ( $result['name'] ?? 'inline' ),
+					'mode'     => (string) ( $result['mode'] ?? 'normal' ),
+					'position' => count( $scripts ) + 1,
+				);
 			}
 
 			// A footer move takes the whole element out of the head, so the
@@ -304,6 +318,8 @@ final class MMF_Assets {
 		// The status screen lists the external hosts of the page just rewritten.
 		$stats = self::merge_stats( $stats, $merge_stats );
 		$stats['external_report'] = MMF_External::report();
+		$stats['last_scripts']    = $scripts;
+		$stats['last_defer']      = $defer_state;
 
 		return array(
 			'html'  => $out,
@@ -355,11 +371,13 @@ final class MMF_Assets {
 	 * @param array<string,mixed> $settings Plugin settings.
 	 * @return array{tag:string,content:string,stats:array<string,int>}
 	 */
-	private static function process_script( string $tag, string $content, array $settings, bool $rocket = false ): array {
+	private static function process_script( string $tag, string $content, array $settings, bool $rocket = false, bool $defer_all = false ): array {
 		$result = array(
 			'tag'     => $tag,
 			'content' => $content,
 			'stats'   => array(),
+			'mode'    => 'normal',
+			'name'    => '',
 		);
 
 		$attributes = self::attributes( $tag );
@@ -380,6 +398,9 @@ final class MMF_Assets {
 		$src = isset( $attributes['src'] ) ? (string) $attributes['src'] : '';
 
 		if ( '' === $src ) {
+			$result['name'] = '';
+			$result['mode'] = 'inline';
+
 			if ( ! empty( $settings['minify_js'] )
 				&& ! empty( $settings['minify_inline'] )
 				&& self::is_js_type( $type )
@@ -444,6 +465,7 @@ final class MMF_Assets {
 			if ( ! self::has_attribute( $tag, 'defer' ) ) {
 				$tag                      = self::add_flag( $tag, 'defer' );
 				$result['stats']['defer'] = 1;
+				$result['mode']           = 'defer';
 			}
 
 			$result['tag'] = $tag;
@@ -479,7 +501,9 @@ final class MMF_Assets {
 				$result['tag']             = self::rocket_tag( $tag, $final_src );
 				$result['rocket']          = true;
 				$result['stats']['rocket'] = 1;
+				$result['mode']            = 'rocket';
 			}
+			$result['name'] = basename( (string) wp_parse_url( $final_src, PHP_URL_PATH ) );
 
 			return $result;
 		}
@@ -490,6 +514,7 @@ final class MMF_Assets {
 			$result['tag']             = self::delay_tag( $tag );
 			$result['delay']           = true;
 			$result['stats']['delayed'] = 1;
+			$result['mode']            = 'delayed';
 
 			return $result;
 		}
@@ -505,17 +530,25 @@ final class MMF_Assets {
 			if ( ! self::has_attribute( $tag, 'async' ) ) {
 				$tag                        = self::add_flag( $tag, 'async' );
 				$result['stats']['async']   = 1;
+				$result['mode']             = 'async';
 			}
 		} elseif ( ! empty( $settings['defer_js'] )
+			&& $defer_all
 			&& ! self::has_attribute( $tag, 'async' )
 			&& ! self::has_attribute( $tag, 'defer' )
-			&& ! str_contains( strtolower( $src ), 'jquery' )
 			&& ! self::matches( $src, $defer_off ) ) {
 			$tag                      = self::add_flag( $tag, 'defer' );
 			$result['stats']['defer'] = 1;
+			$result['mode']           = 'defer';
 		}
 
 		$result['tag'] = $tag;
+
+		if ( self::has_attribute( $tag, 'async' ) ) {
+			$result['mode'] = 'async';
+		}
+
+		$result['name'] = basename( (string) wp_parse_url( $src, PHP_URL_PATH ) );
 
 		// Moving is decided here because only this method knows whether the tag
 		// ended up async (an async script is already non-blocking and keeps its
@@ -637,6 +670,99 @@ final class MMF_Assets {
 		}
 
 		return $out;
+	}
+
+	/**
+	 * Whether `defer_js` may be applied to the whole page.
+	 *
+	 * All-or-nothing: deferring a subset reorders execution (a deferred file
+	 * runs after parsing, a normal one during it), which breaks scripts that
+	 * expect their dependency to be there. One blocker is enough to leave every
+	 * script as the theme printed it.
+	 *
+	 * @param string              $html     Document.
+	 * @param array<string,mixed> $settings Plugin settings.
+	 * @return array{allowed:bool,reason:string,blockers:string[]}
+	 */
+	private static function defer_state( string $html, array $settings ): array {
+		$state = array(
+			'allowed'  => false,
+			'reason'   => __( 'выключен', 'modern-minify' ),
+			'blockers' => array(),
+		);
+
+		if ( empty( $settings['defer_js'] ) ) {
+			return $state;
+		}
+
+		$tokens   = MMF_HTML::tokenize( $html );
+		$count    = 0;
+		$external = ! empty( $settings['defer_external'] );
+
+		foreach ( $tokens as $token ) {
+			if ( 'tag' !== $token['type'] || $token['closing'] || 'script' !== $token['name'] ) {
+				continue;
+			}
+
+			$attrs = self::attributes( (string) $token['raw'] );
+			$src   = isset( $attrs['src'] ) ? (string) $attrs['src'] : '';
+
+			if ( '' === $src ) {
+				continue;
+			}
+
+			$count++;
+			$type = strtolower( trim( (string) ( $attrs['type'] ?? '' ) ) );
+			$name = basename( (string) wp_parse_url( $src, PHP_URL_PATH ) );
+
+			if ( self::is_module( $type ) || ! self::is_js_type( $type ) ) {
+				$state['blockers'][] = $name . ' (' . __( 'модуль', 'modern-minify' ) . ')';
+				continue;
+			}
+
+			if ( self::has_attribute( (string) $token['raw'], 'async' ) ) {
+				$state['blockers'][] = $name . ' (async)';
+				continue;
+			}
+
+			if ( self::matches( $src, $settings['exclude_js'] ?? array() ) ) {
+				$state['blockers'][] = $name . ' (' . __( 'исключение', 'modern-minify' ) . ')';
+				continue;
+			}
+
+			if ( self::matches( $src, $settings['defer_skip'] ?? array() ) ) {
+				$state['blockers'][] = $name . ' (' . __( 'не откладывать', 'modern-minify' ) . ')';
+				continue;
+			}
+
+			if ( ! self::is_local_url( $src ) && ! $external ) {
+				$state['blockers'][] = $name . ' (' . __( 'внешний', 'modern-minify' ) . ')';
+				continue;
+			}
+
+			if ( str_contains( strtolower( $src ), 'jquery-migrate' )
+				&& function_exists( 'wp_script_is' ) && wp_script_is( 'jquery-migrate', 'registered' ) ) {
+				$state['blockers'][] = 'jquery-migrate';
+			}
+		}
+
+		if ( 0 === $count ) {
+			$state['reason'] = __( 'на странице нет внешних скриптов', 'modern-minify' );
+
+			return $state;
+		}
+
+		if ( array() !== $state['blockers'] ) {
+			/* translators: %s: list of blocking scripts. */
+			$state['reason'] = sprintf( __( 'не применён, исключены: %s', 'modern-minify' ), implode( ', ', array_slice( $state['blockers'], 0, 5 ) ) );
+
+			return $state;
+		}
+
+		$state['allowed'] = true;
+		$state['reason']  = __( 'применён', 'modern-minify' );
+
+		return $state;
 	}
 
 	/**

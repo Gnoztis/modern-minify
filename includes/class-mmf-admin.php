@@ -53,6 +53,11 @@ final class MMF_Admin {
 	public const RECOMMENDED_NONCE = 'mmf_recommended_settings';
 
 	/**
+	 * Nonce action of the one-time toast flag.
+	 */
+	public const TOAST_NONCE = 'mmf_toast';
+
+	/**
 	 * Attaches the screen.
 	 */
 	public static function register_hooks(): void {
@@ -111,7 +116,6 @@ final class MMF_Admin {
 			__( 'Delay JS — выключить (список шаблонов будет очищен)', 'modern-minify' ),
 			__( 'Rocket-режим — выключить', 'modern-minify' ),
 			__( 'defer для внешних — выключить', 'modern-minify' ),
-			__( 'Не изменяются: исключения, шаблоны async/defer, лимиты, TTL, тестовый режим.', 'modern-minify' ),
 		);
 	}
 
@@ -140,12 +144,16 @@ final class MMF_Admin {
 		MMF_Config::update( self::recommended_profile() );
 		$deleted = MMF_Cache::delete_all();
 
+		MMF_Stats::record_action( sprintf( __( 'Рекомендуемые настройки применены, кеш сброшен (удалено файлов: %d).', 'modern-minify' ), (int) $deleted ) );
+
 		wp_safe_redirect(
 			add_query_arg(
 				array(
 					'page'            => self::PAGE,
 					'mmf-recommended' => '1',
 					'mmf-reset'       => $deleted,
+					'mmf-toast'       => 'recommended',
+					'mmf-toast-nonce' => wp_create_nonce( self::TOAST_NONCE ),
 				),
 				admin_url( 'options-general.php' )
 			)
@@ -171,13 +179,28 @@ final class MMF_Admin {
 		check_admin_referer( self::TEST_NONCE );
 
 		$current = (bool) MMF_Config::get( 'test_mode' );
+		$current = (bool) MMF_Config::get( 'test_mode' );
 		MMF_Config::update( array( 'test_mode' => ! $current ) );
+
+		MMF_Stats::record_action(
+			$current
+				? __( 'Тестовый режим выключен.', 'modern-minify' )
+				: __( 'Тестовый режим включён.', 'modern-minify' )
+		);
 
 		$redirect = function_exists( 'wp_get_referer' ) ? wp_get_referer() : false;
 
 		if ( ! is_string( $redirect ) || '' === $redirect ) {
 			$redirect = admin_url( 'options-general.php?page=' . self::PAGE );
 		}
+
+		$redirect = add_query_arg(
+			array(
+				'mmf-toast'       => $current ? 'test-off' : 'test-on',
+				'mmf-toast-nonce' => wp_create_nonce( self::TOAST_NONCE ),
+			),
+			$redirect
+		);
 
 		wp_safe_redirect( $redirect );
 		exit;
@@ -242,11 +265,21 @@ final class MMF_Admin {
 
 		$deleted = MMF_Cache::delete_all();
 
+		// A manual reset is also a statistics reset: after it the counters would
+		// describe a state that no longer exists. The TTL cleanup never comes
+		// here - it removes old files, not accumulated observations.
+		MMF_Stats::reset();
+		delete_option( 'mmf_last_scripts' );
+
+		MMF_Stats::record_action( sprintf( __( 'Кеш очищен и статистика сброшена (удалено файлов: %d).', 'modern-minify' ), (int) $deleted ) );
+
 		wp_safe_redirect(
 			add_query_arg(
 				array(
-					'page'      => self::PAGE,
-					'mmf-reset' => $deleted,
+					'page'            => self::PAGE,
+					'mmf-reset'       => $deleted,
+					'mmf-toast'       => 'reset',
+					'mmf-toast-nonce' => wp_create_nonce( self::TOAST_NONCE ),
 				),
 				admin_url( 'options-general.php' )
 			)
@@ -266,7 +299,8 @@ final class MMF_Admin {
 
 		echo '<div class="wrap mmf-wrap">';
 
-		self::render_notices();
+		self::render_toasts();
+		self::render_alerts();
 
 		echo '<nav class="nav-tab-wrapper mmf-tabs">';
 
@@ -295,6 +329,10 @@ final class MMF_Admin {
 				self::render_status();
 			}
 
+			if ( 'external' === $slug ) {
+				self::render_external_tab();
+			}
+
 			self::render_merge_warning( (string) $slug );
 			self::render_rocket_notices( (string) $slug );
 
@@ -305,10 +343,6 @@ final class MMF_Admin {
 			}
 
 			echo '</tbody></table>';
-
-			if ( 'advanced' === $slug ) {
-				self::render_external_exclusions();
-			}
 
 			if ( 'settings' === $slug ) {
 				self::render_html_note();
@@ -332,6 +366,7 @@ final class MMF_Admin {
 			'javascript' => __( 'JavaScript', 'modern-minify' ),
 			'css'        => __( 'CSS', 'modern-minify' ),
 			'fonts'      => __( 'Шрифты', 'modern-minify' ),
+			'external'   => __( 'Внешние файлы', 'modern-minify' ),
 			'settings'   => __( 'Настройки', 'modern-minify' ),
 			'advanced'   => __( 'Дополнительно', 'modern-minify' ),
 		);
@@ -348,11 +383,12 @@ final class MMF_Admin {
 	public static function tab_fields(): array {
 		return array(
 			'status'     => array(),
-			'javascript' => array( 'minify_js', 'merge_js', 'async_js', 'defer_js', 'defer_external', 'defer_skip', 'exclude_js', 'move_scripts_to_footer', 'delay_js', 'delay_js_exclude', 'delay_js_timeout', 'rocket_mode', 'rocket_exclude' ),
+			'javascript' => array( 'minify_js', 'merge_js', 'async_js', 'defer_js', 'defer_external', 'defer_skip', 'exclude_js', 'remove_jquery_migrate', 'move_scripts_to_footer', 'delay_js', 'delay_js_exclude', 'delay_js_timeout', 'rocket_mode', 'rocket_exclude' ),
 			'css'        => array( 'minify_css', 'merge_css', 'inline_css', 'inline_css_limit', 'remove_print_css', 'exclude_css' ),
 			'fonts'      => array( 'fonts_method', 'fawesome_method', 'inline_fonts_css' ),
-			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_generator', 'remove_emoji', 'ver_mode' ),
-			'advanced'   => array( 'cache_ttl', 'test_mode', 'debug', 'external_mode', 'external_max_size', 'merge_max_files', 'merge_max_size', 'disable_gravatar' ),
+			'external'   => array(),
+			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_generator', 'remove_emoji', 'ver_mode', 'disable_gravatar' ),
+			'advanced'   => array( 'cache_ttl', 'test_mode', 'debug', 'merge_max_files', 'merge_max_size' ),
 		);
 	}
 
@@ -376,8 +412,12 @@ final class MMF_Admin {
 				__( 'По одному шаблону на строку. Символ * означает любое количество символов.', 'modern-minify' ),
 			),
 			'defer_js'               => array(
-				__( 'Откладывать все скрипты (defer)', 'modern-minify' ),
-				__( 'Кроме уже async, файлов jquery и списка «не откладывать».', 'modern-minify' ),
+				__( 'Откладывать все скрипты (если хоть один исключён — не откладывается ничего)', 'modern-minify' ),
+				__( 'Режим «всё или ничего»: если хотя бы один внешний скрипт остаётся обычным (исключение, async, module, внешний домен), defer не применяется ни к кому. Причина видна на «Статусе».', 'modern-minify' ),
+			),
+			'remove_jquery_migrate'  => array(
+				__( 'Убирать jQuery Migrate', 'modern-minify' ),
+				__( 'jQuery Migrate не нужен современным темам; включите, если появились предупреждения от старого кода. Админка не затрагивается.', 'modern-minify' ),
 			),
 			'defer_skip'             => array(
 				__( 'Не откладывать', 'modern-minify' ),
@@ -589,15 +629,25 @@ final class MMF_Admin {
 		$value = MMF_Config::get( $key );
 		$type  = (string) ( $field['type'] ?? 'bool' );
 
-		echo '<tr><th scope="row">';
+		echo '<tr class="' . ( 'bool' === $type ? 'mmf-row--bool' : 'mmf-row' ) . '"><th scope="row">';
 		echo '<label for="' . esc_attr( $id ) . '">' . esc_html( $label ) . '</label>';
+		self::render_recommended_badge( $key, $value, $field );
 		echo '</th><td>';
 
 		if ( 'bool' === $type ) {
 			// A hidden zero makes "unchecked" post a value: otherwise the key is
 			// absent from the request and the sanitiser would restore the default.
 			echo '<input type="hidden" name="' . esc_attr( $name ) . '" value="0" />';
-			echo '<input type="checkbox" id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" value="1"' . ( $value ? ' checked="checked"' : '' ) . ' />';
+
+			// The checkbox and its description share one line; clicking the text
+			// toggles the box because both are inside the label.
+			echo '<label class="mmf-bool"><input type="checkbox" id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" value="1"' . ( $value ? ' checked="checked"' : '' ) . ' />';
+
+			if ( '' !== $help ) {
+				echo '<span class="mmf-bool__text description">' . esc_html( $help ) . '</span>';
+			}
+
+			echo '</label>';
 		} elseif ( 'list' === $type ) {
 			$lines = is_array( $value ) ? implode( "\n", array_map( 'strval', $value ) ) : '';
 			echo '<textarea id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" rows="5" class="large-text code">' . esc_textarea( $lines ) . '</textarea>';
@@ -627,7 +677,7 @@ final class MMF_Admin {
 			echo '</select>';
 		}
 
-		if ( '' !== $help ) {
+		if ( '' !== $help && 'bool' !== $type ) {
 			echo '<p class="description">' . esc_html( $help ) . '</p>';
 		}
 
@@ -645,6 +695,7 @@ final class MMF_Admin {
 		echo '<h2>' . esc_html__( 'Состояние', 'modern-minify' ) . '</h2>';
 		echo '<p class="mmf-status mmf-status--on">' . esc_html__( 'плагин активен', 'modern-minify' ) . '</p>';
 
+		self::render_last_action();
 		self::render_features();
 
 		echo '<div class="mmf-status-columns">';
@@ -663,6 +714,9 @@ final class MMF_Admin {
 			__( 'Отложенная загрузка', 'modern-minify' ),
 			array(
 				__( 'Скриптов defer', 'modern-minify' )        => (string) (int) $stats['defer'],
+				__( 'defer на странице', 'modern-minify' )      => ! empty( $stats['last_defer']['allowed'] )
+					? __( 'применён', 'modern-minify' )
+					: (string) ( $stats['last_defer']['reason'] ?? __( 'не применён', 'modern-minify' ) ),
 				__( 'Скриптов async', 'modern-minify' )        => (string) (int) $stats['async'],
 				__( 'Перенесено в подвал', 'modern-minify' )   => (string) (int) $stats['moved'],
 				__( 'Delay JS, всего', 'modern-minify' )       => (string) (int) $stats['delayed'],
@@ -701,7 +755,6 @@ final class MMF_Admin {
 
 		echo '</div>';
 
-		self::render_external_report( $stats );
 
 		printf(
 			'<p class="description">%s %s</p>',
@@ -747,15 +800,22 @@ final class MMF_Admin {
 			esc_html__( 'Безопасный набор для обычного сайта: включает минификацию, локальные шрифты и граватары, выключает рискованные режимы.', 'modern-minify' )
 		);
 
-		echo '<details class="mmf-recommended-box"><summary>' . esc_html__( 'Что изменится', 'modern-minify' ) . '</summary><ul>';
+		echo '<p class="mmf-actions">';
+		echo '<a class="button button-secondary mmf-recommended" href="' . esc_url( $recommended_url ) . '" aria-describedby="mmf-recommended-popover">' . esc_html__( 'Применить рекомендуемые настройки', 'modern-minify' ) . '</a>';
+		echo '<button type="button" class="mmf-help" aria-expanded="false" aria-describedby="mmf-recommended-popover" aria-label="' . esc_attr__( 'Что изменится', 'modern-minify' ) . '"><span class="dashicons dashicons-editor-help" aria-hidden="true"></span></button>';
+		echo '</p>';
+
+		echo '<div class="mmf-popover" id="mmf-recommended-popover" role="tooltip" hidden>';
+		echo '<h4>' . esc_html__( 'Что изменится', 'modern-minify' ) . '</h4><ul>';
 
 		foreach ( $labels as $label ) {
 			echo '<li>' . esc_html( $label ) . '</li>';
 		}
 
-		echo '</ul></details>';
-
-		echo '<p class="mmf-actions"><a class="button button-secondary mmf-recommended" href="' . esc_url( $recommended_url ) . '" data-confirm="' . esc_attr( implode( '; ', $labels ) ) . '">' . esc_html__( 'Применить рекомендуемые настройки', 'modern-minify' ) . '</a></p>';
+		echo '</ul>';
+		echo '<p class="mmf-popover__note">' . esc_html__( 'Не изменяются: исключения, шаблоны async/defer, лимиты, TTL, тестовый режим.', 'modern-minify' ) . '</p>';
+		echo '<p class="mmf-popover__actions"><a class="button button-primary" href="' . esc_url( $recommended_url ) . '">' . esc_html__( 'Применить', 'modern-minify' ) . '</a> <button type="button" class="button mmf-popover__cancel">' . esc_html__( 'Отмена', 'modern-minify' ) . '</button></p>';
+		echo '</div>';
 	}
 
 	/**
@@ -766,121 +826,242 @@ final class MMF_Admin {
 	}
 
 	/**
+	 * Short human label of a recommended value, for the badge.
+	 *
+	 * @param string $key   Setting name.
+	 * @param mixed  $value Recommended value.
+	 */
+	private static function recommended_value_label( string $key, $value ): string {
+		$map = array(
+			'fonts_method'    => array(
+				'local' => __( 'локально', 'modern-minify' ),
+				'swap'  => 'display=swap',
+				'off'   => __( 'не трогать', 'modern-minify' ),
+			),
+			'fawesome_method' => array(
+				'inline' => __( 'инлайном', 'modern-minify' ),
+				'off'    => __( 'не трогать', 'modern-minify' ),
+			),
+			'ver_mode'        => array(
+				'hash'   => __( 'хеш', 'modern-minify' ),
+				'remove' => __( 'удалить', 'modern-minify' ),
+				'keep'   => __( 'не трогать', 'modern-minify' ),
+			),
+			'external_mode'   => array(
+				'local'  => __( 'локально', 'modern-minify' ),
+				'keep'   => __( 'не трогать', 'modern-minify' ),
+				'remove' => __( 'удалить', 'modern-minify' ),
+			),
+		);
+
+		if ( is_bool( $value ) ) {
+			return $value ? __( 'включить', 'modern-minify' ) : __( 'выключить', 'modern-minify' );
+		}
+
+		if ( is_array( $value ) ) {
+			return array() === $value ? __( 'выключить', 'modern-minify' ) : __( 'включить', 'modern-minify' );
+		}
+
+		$value = is_scalar( $value ) ? (string) $value : '';
+
+		return isset( $map[ $key ][ $value ] ) ? (string) $map[ $key ][ $value ] : $value;
+	}
+
+	/**
+	 * Prints the "(Рекомендуемые)" badge of a field that is part of the profile.
+	 *
+	 * The profile is the only source: a field is in the badge set exactly when
+	 * `recommended_profile()` has it, and the badge shows the recommended value
+	 * whenever the current value differs.
+	 *
+	 * @param string              $key   Setting name.
+	 * @param mixed               $value Current value.
+	 * @param array<string,mixed> $field Field definition.
+	 */
+	private static function render_recommended_badge( string $key, $value, array $field ): void {
+		$profile = self::recommended_profile();
+
+		if ( ! array_key_exists( $key, $profile ) ) {
+			return;
+		}
+
+		$recommended = $profile[ $key ];
+
+		if ( is_array( $recommended ) ) {
+			$matches = (array) $value === $recommended;
+		} elseif ( is_bool( $recommended ) ) {
+			$matches = (bool) $value === $recommended;
+		} else {
+			$matches = (string) $value === (string) $recommended;
+		}
+
+		if ( $matches ) {
+			$text  = __( 'Рекомендуется', 'modern-minify' );
+			$label = __( 'Значение совпадает с рекомендуемым', 'modern-minify' );
+		} else {
+			$label = self::recommended_value_label( $key, $recommended );
+
+			/* translators: %s: recommended value. */
+			$text = sprintf( __( 'Рекомендуется: %s', 'modern-minify' ), $label );
+		}
+
+		echo '<span class="mmf-badge mmf-badge--recommended" aria-label="' . esc_attr( $label ) . '">' . esc_html( $text ) . '</span>';
+	}
+
+	/**
 	 * One card of the status grid.
 	 *
 	 * @param string               $title Card title.
 	 * @param array<string,string> $rows  Label to value.
 	 */
 	private static function status_group( string $title, array $rows ): void {
-		echo '<section class="mmf-status-card"><h3>' . esc_html( $title ) . '</h3>';
-		echo '<table class="widefat striped mmf-status-table"><tbody>';
+		echo '<section class="mmf-card mmf-status-card"><h3 class="mmf-section-title">' . esc_html( $title ) . '</h3><dl class="mmf-metrics">';
 
 		foreach ( $rows as $label => $value ) {
-			echo '<tr><td>' . esc_html( (string) $label ) . '</td><td>' . esc_html( (string) $value ) . '</td></tr>';
+			echo '<div class="mmf-metric"><dt class="mmf-metric__label">' . esc_html( (string) $label ) . '</dt><dd class="mmf-metric__value">' . esc_html( (string) $value ) . '</dd></div>';
 		}
 
-		echo '</tbody></table></section>';
+		echo '</dl></section>';
+	}
+
+	/**
+	 * The last action's result, so it survives the toast.
+	 */
+	private static function render_last_action(): void {
+		$last = MMF_Stats::last_action();
+
+		echo '<section class="mmf-card mmf-last-action"><h3 class="mmf-section-title">' . esc_html__( 'Последнее действие', 'modern-minify' ) . '</h3>';
+
+		if ( '' === $last['message'] ) {
+			echo '<p class="description">' . esc_html__( 'Пока ничего не менялось.', 'modern-minify' ) . '</p>';
+		} else {
+			echo '<p class="mmf-last-action__text">' . esc_html( $last['message'] ) . '</p>';
+
+			if ( $last['time'] > 0 ) {
+				echo '<p class="description">' . esc_html( (string) wp_date( 'Y-m-d H:i:s', $last['time'] ) ) . '</p>';
+			}
+		}
+
+		echo '</section>';
 	}
 
 	/**
 	 * Lists what the plugin is currently doing, instead of a master switch.
 	 */
 	private static function render_features(): void {
-		$features = array();
+		$groups = array(
+			__( 'Минификация', 'modern-minify' ) => array(
+				array( 'dashicons-editor-code', __( 'HTML', 'modern-minify' ), (bool) MMF_Config::get( 'minify_html' ) ),
+				array( 'dashicons-editor-code', __( 'CSS', 'modern-minify' ), (bool) MMF_Config::get( 'minify_css' ) ),
+				array( 'dashicons-editor-code', __( 'JavaScript', 'modern-minify' ), (bool) MMF_Config::get( 'minify_js' ) ),
+				array( 'dashicons-editor-code', __( 'Инлайн-блоки', 'modern-minify' ), (bool) MMF_Config::get( 'minify_inline' ) ),
+				array( 'dashicons-screenoptions', __( 'Пакеты CSS', 'modern-minify' ), (bool) MMF_Config::get( 'merge_css' ) ),
+				array( 'dashicons-screenoptions', __( 'Пакеты JS', 'modern-minify' ), (bool) MMF_Config::get( 'merge_js' ) ),
+				array( 'dashicons-editor-insertmore', __( 'Встраивание CSS', 'modern-minify' ), (bool) MMF_Config::get( 'inline_css' ) ),
+				array( 'dashicons-printer', __( 'Print-стили', 'modern-minify' ), (bool) MMF_Config::get( 'remove_print_css' ) ),
+			),
+			__( 'Внешние файлы', 'modern-minify' ) => array(
+				array( 'dashicons-admin-site-alt3', __( 'Локализация CDN', 'modern-minify' ), MMF_External::MODE_LOCAL === MMF_External::mode( MMF_Config::all() ) ),
+				array( 'dashicons-download', __( 'Google Fonts локально', 'modern-minify' ), 'local' === strtolower( (string) MMF_Config::get( 'fonts_method', 'off' ) ) ),
+				array( 'dashicons-editor-code', __( 'CSS шрифтов инлайном', 'modern-minify' ), (bool) MMF_Config::get( 'inline_fonts_css' ) ),
+				array( 'dashicons-admin-appearance', __( 'Font Awesome инлайном', 'modern-minify' ), 'inline' === strtolower( (string) MMF_Config::get( 'fawesome_method', 'off' ) ) ),
+				array( 'dashicons-clock', __( 'defer внешних', 'modern-minify' ), (bool) MMF_Config::get( 'defer_external' ) ),
+				array( 'dashicons-buddicons-community', __( 'Граватары локально', 'modern-minify' ), (bool) MMF_Config::get( 'disable_gravatar' ) ),
+			),
+			__( 'Скрытие версий', 'modern-minify' ) => array(
+				array( 'dashicons-shield', __( 'Версия в URL', 'modern-minify' ), 'keep' !== (string) MMF_Config::get( 'ver_mode', 'hash' ) ),
+				array( 'dashicons-hidden', __( 'Generator', 'modern-minify' ), (bool) MMF_Config::get( 'remove_generator' ) ),
+				array( 'dashicons-smiley', __( 'Emoji-скрипты', 'modern-minify' ), (bool) MMF_Config::get( 'remove_emoji' ) ),
+			),
+			__( 'Прочее', 'modern-minify' ) => array(
+				array( 'dashicons-download', __( 'Скрипты в подвале', 'modern-minify' ), (bool) MMF_Config::get( 'move_scripts_to_footer' ) ),
+				array( 'dashicons-clock', __( 'Delay JS', 'modern-minify' ), array() !== (array) MMF_Config::get( 'delay_js', array() ) ),
+				array( 'dashicons-performance', __( 'Rocket-режим', 'modern-minify' ), (bool) MMF_Config::get( 'rocket_mode' ) ),
+				array( 'dashicons-visibility', __( 'Тестовый режим', 'modern-minify' ), (bool) MMF_Config::get( 'test_mode' ) ),
+			),
+		);
 
-		if ( MMF_Config::get( 'minify_html' ) ) {
-			$features[] = __( 'HTML сжимается', 'modern-minify' );
+		echo '<div class="mmf-chips">';
+
+		foreach ( $groups as $title => $chips ) {
+			echo '<section class="mmf-card mmf-chip-group"><h3 class="mmf-section-title">' . esc_html( $title ) . '</h3><ul class="mmf-chips-list">';
+
+			foreach ( $chips as $chip ) {
+				$on = (bool) $chip[2];
+
+				printf(
+					'<li class="mmf-chip %s"><span class="dashicons %s mmf-chip__icon" aria-hidden="true"></span><span class="mmf-chip__dot" aria-hidden="true"></span><span class="mmf-chip__label">%s</span><span class="screen-reader-text">%s</span></li>',
+					$on ? 'mmf-chip--on' : 'mmf-chip--off',
+					esc_attr( (string) $chip[0] ),
+					esc_html( (string) $chip[1] ),
+					$on ? esc_html__( 'включено', 'modern-minify' ) : esc_html__( 'выключено', 'modern-minify' )
+				);
+			}
+
+			echo '</ul></section>';
 		}
 
-		$js = array();
+		echo '</div>';
+	}
 
-		if ( MMF_Config::get( 'minify_js' ) ) {
-			$js[] = __( 'минификация', 'modern-minify' );
+	/**
+	 * Prints the scripts of the last counted page with their modes.
+	 *
+	 * This is the diagnostic that turns "jQuery is not defined" into "this file
+	 * stayed normal while the rest was deferred".
+	 *
+	 * @param array<string,mixed> $stats Counters.
+	 */
+	private static function render_script_report( array $stats ): void {
+		$scripts = isset( $stats['last_scripts'] ) && is_array( $stats['last_scripts'] ) ? $stats['last_scripts'] : array();
+		$defer   = isset( $stats['last_defer'] ) && is_array( $stats['last_defer'] ) ? $stats['last_defer'] : array();
+
+		$labels = array(
+			'normal'  => __( 'обычный', 'modern-minify' ),
+			'defer'   => 'defer',
+			'async'   => 'async',
+			'delayed' => __( 'отложен', 'modern-minify' ),
+			'inline'  => __( 'инлайн', 'modern-minify' ),
+			'rocket'  => 'Rocket',
+		);
+
+		echo '<section class="mmf-card mmf-report"><h2 class="mmf-section-title">' . esc_html__( 'Скрипты последней учтённой страницы', 'modern-minify' ) . '</h2>';
+
+		if ( array() === $scripts ) {
+			echo '<p class="description">' . esc_html__( 'Данных пока нет: страница ещё не обрабатывалась.', 'modern-minify' ) . '</p>';
+			echo '</section>';
+
+			return;
 		}
 
-		if ( MMF_Config::get( 'merge_js' ) ) {
-			$js[] = __( 'пакеты', 'modern-minify' );
+		$has_normal = false;
+
+		foreach ( $scripts as $script ) {
+			if ( 'normal' === ( $script['mode'] ?? '' ) ) {
+				$has_normal = true;
+			}
 		}
 
-		if ( MMF_Config::get( 'defer_js' ) ) {
-			$js[] = 'defer';
+		if ( ! empty( $defer['allowed'] ) && $has_normal ) {
+			echo '<p class="mmf-alert mmf-alert--error" role="alert">' . esc_html__( 'defer применён, но в списке есть скрипты в обычном режиме — это и есть причина ошибок порядка в консоли.', 'modern-minify' ) . '</p>';
 		}
 
-		if ( MMF_Config::get( 'defer_external' ) ) {
-			$js[] = 'defer external';
+		echo '<table class="widefat striped mmf-report-table mmf-scripts-table"><thead><tr>';
+		echo '<th scope="col">' . esc_html__( 'Скрипт', 'modern-minify' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Режим', 'modern-minify' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Позиция', 'modern-minify' ) . '</th>';
+		echo '</tr></thead><tbody>';
+
+		foreach ( $scripts as $script ) {
+			$name = isset( $script['name'] ) && '' !== (string) $script['name'] ? (string) $script['name'] : __( 'инлайн', 'modern-minify' );
+			$mode = isset( $script['mode'] ) ? (string) $script['mode'] : 'normal';
+
+			echo '<tr><td><code>' . esc_html( $name ) . '</code></td>';
+			echo '<td><span class="mmf-badge mmf-badge--status">' . esc_html( $labels[ $mode ] ?? $mode ) . '</span></td>';
+			echo '<td>' . esc_html( (string) (int) ( $script['position'] ?? 0 ) ) . '</td></tr>';
 		}
 
-		if ( MMF_Config::get( 'rocket_mode' ) ) {
-			$js[] = 'Rocket';
-		}
-
-		$delay = MMF_Config::get( 'delay_js', array() );
-
-		if ( is_array( $delay ) && array() !== $delay ) {
-			$js[] = 'Delay JS';
-		}
-
-		if ( array() !== $js ) {
-			$features[] = __( 'JavaScript', 'modern-minify' ) . ' — ' . implode( ', ', $js );
-		}
-
-		$css = array();
-
-		if ( MMF_Config::get( 'minify_css' ) ) {
-			$css[] = __( 'минификация', 'modern-minify' );
-		}
-
-		if ( MMF_Config::get( 'merge_css' ) ) {
-			$css[] = __( 'пакеты', 'modern-minify' );
-		}
-
-		if ( MMF_Config::get( 'inline_css' ) ) {
-			$css[] = __( 'встраивание', 'modern-minify' );
-		}
-
-		if ( array() !== $css ) {
-			$features[] = __( 'CSS', 'modern-minify' ) . ' — ' . implode( ', ', $css );
-		}
-
-		$fonts = strtolower( (string) MMF_Config::get( 'fonts_method', 'off' ) );
-
-		if ( 'local' === $fonts ) {
-			$features[] = __( 'Google Fonts локально', 'modern-minify' );
-		} elseif ( 'swap' === $fonts ) {
-			$features[] = __( 'Google Fonts: display=swap', 'modern-minify' );
-		}
-
-		if ( 'inline' === strtolower( (string) MMF_Config::get( 'fawesome_method', 'off' ) ) ) {
-			$features[] = __( 'Font Awesome инлайном', 'modern-minify' );
-		}
-
-		if ( MMF_External::MODE_LOCAL === MMF_External::mode( MMF_Config::all() ) ) {
-			$features[] = __( 'внешние файлы локально', 'modern-minify' );
-		}
-
-		if ( MMF_Config::get( 'remove_generator' ) ) {
-			$features[] = __( 'без версии WordPress', 'modern-minify' );
-		}
-
-		if ( MMF_Config::get( 'remove_emoji' ) ) {
-			$features[] = __( 'без emoji-скриптов', 'modern-minify' );
-		}
-
-		if ( MMF_Config::get( 'disable_gravatar' ) ) {
-			$features[] = __( 'граватары локально', 'modern-minify' );
-		}
-
-		if ( MMF_Config::get( 'test_mode' ) ) {
-			$features[] = __( 'тестовый режим', 'modern-minify' );
-		}
-
-		echo '<ul class="mmf-features">';
-
-		foreach ( $features as $feature ) {
-			echo '<li>' . esc_html( (string) $feature ) . '</li>';
-		}
-
-		echo '</ul>';
+		echo '</tbody></table></section>';
 	}
 
 	/**
@@ -891,10 +1072,11 @@ final class MMF_Admin {
 	private static function render_external_report( array $stats ): void {
 		$report = isset( $stats['last_external'] ) && is_array( $stats['last_external'] ) ? $stats['last_external'] : array();
 
-		echo '<h2>' . esc_html__( 'Внешние хосты на последней учтённой странице', 'modern-minify' ) . '</h2>';
+		echo '<section class="mmf-card mmf-report"><h2 class="mmf-section-title">' . esc_html__( 'Внешние хосты на последней учтённой странице', 'modern-minify' ) . '</h2>';
 
 		if ( array() === $report ) {
 			echo '<p class="description">' . esc_html__( 'Внешних файлов не найдено.', 'modern-minify' ) . '</p>';
+			echo '</section>';
 
 			return;
 		}
@@ -907,12 +1089,10 @@ final class MMF_Admin {
 			'removed'   => __( 'тег удалён', 'modern-minify' ),
 		);
 
-		echo '<table class="widefat striped mmf-status-table"><thead><tr>';
-		echo '<th>' . esc_html__( 'Хост', 'modern-minify' ) . '</th>';
-		echo '<th>' . esc_html__( 'Что сделано', 'modern-minify' ) . '</th>';
+		echo '<table class="widefat striped mmf-report-table"><thead><tr>';
+		echo '<th scope="col">' . esc_html__( 'Хост', 'modern-minify' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Что сделано', 'modern-minify' ) . '</th>';
 		echo '</tr></thead><tbody>';
-
-		$lines = array();
 
 		foreach ( $report as $entry ) {
 			if ( ! is_array( $entry ) || ! isset( $entry['host'], $entry['status'] ) ) {
@@ -923,27 +1103,37 @@ final class MMF_Admin {
 			$status = (string) $entry['status'];
 			$label  = isset( $labels[ $status ] ) ? $labels[ $status ] : $status;
 
-			echo '<tr><td><code>' . esc_html( $host ) . '</code></td><td>' . esc_html( $label ) . '</td></tr>';
-
-			$lines[] = $host . ' — ' . $label;
+			echo '<tr><td><code>' . esc_html( $host ) . '</code></td><td><span class="mmf-badge mmf-badge--status">' . esc_html( $label ) . '</span></td></tr>';
 		}
 
-		echo '</tbody></table>';
-
-		echo '<p class="description">' . esc_html__( 'Этот список можно скопировать и прислать как диагностику:', 'modern-minify' ) . '</p>';
-		echo '<textarea readonly rows="' . esc_attr( (string) max( 2, count( $lines ) ) ) . '" class="large-text code">' . esc_textarea( implode( "\n", $lines ) ) . '</textarea>';
+		echo '</tbody></table></section>';
 	}
 
 	/**
-	 * Prints the external exclusion table: built-in hosts with a reason, and the
-	 * editable user list.
+	 * The whole external-files tab: mode, both exclusion lists, the size limit
+	 * and the hosts of the last counted page.
 	 */
-	private static function render_external_exclusions(): void {
-		$current = MMF_Config::get( 'external_exclude', array() );
-		$current = is_array( $current ) ? $current : array();
+	private static function render_external_tab(): void {
+		echo '<table class="form-table" role="presentation"><tbody>';
+		self::render_field( 'external_mode' );
+		echo '</tbody></table>';
 
-		echo '<h2>' . esc_html__( 'Внешние файлы: исключения', 'modern-minify' ) . '</h2>';
-		echo '<p class="description">' . esc_html__( 'Хосты ниже не локализуются: их скрипты сверяют домен в Referer или Origin, и локальная копия ломает виджет.', 'modern-minify' ) . '</p>';
+		self::render_builtin_exclusions();
+		self::render_user_exclusions();
+
+		echo '<table class="form-table" role="presentation"><tbody>';
+		self::render_field( 'external_max_size' );
+		echo '</tbody></table>';
+
+		self::render_external_report( MMF_Stats::all() );
+	}
+
+	/**
+	 * Built-in hosts: a table with the reason and a disabled control.
+	 */
+	private static function render_builtin_exclusions(): void {
+		echo '<section class="mmf-card"><h2 class="mmf-section-title">' . esc_html__( 'Встроенные исключения', 'modern-minify' ) . '</h2>';
+		echo '<p class="description">' . esc_html__( 'Эти хосты не локализуются: их скрипты сверяют домен в Referer или Origin, и локальная копия ломает виджет. Список не редактируется.', 'modern-minify' ) . '</p>';
 
 		echo '<table class="widefat striped mmf-status-table"><thead><tr>';
 		echo '<th>' . esc_html__( 'Хост', 'modern-minify' ) . '</th>';
@@ -951,107 +1141,124 @@ final class MMF_Admin {
 		echo '<th>' . esc_html__( 'Оставить внешним', 'modern-minify' ) . '</th>';
 		echo '</tr></thead><tbody>';
 
-		$reasons = self::external_reasons();
+		foreach ( MMF_External::BUILTIN as $host => $reason_key ) {
+			$host = (string) $host;
 
-		foreach ( MMF_External::DEFAULT_DOMAINS as $suffix ) {
-			$suffix = (string) $suffix;
-			$reason = isset( $reasons[ $suffix ] ) ? $reasons[ $suffix ] : __( 'Привязан к домену сайта.', 'modern-minify' );
-
-			echo '<tr><td><code>' . esc_html( $suffix ) . '</code><br /><span class="description">' . esc_html__( 'домен и поддомены', 'modern-minify' ) . '</span></td>';
-			echo '<td>' . esc_html( $reason ) . '</td>';
-			echo '<td><input type="checkbox" checked="checked" disabled="disabled" /></td></tr>';
+			echo '<tr><td><code>' . esc_html( $host ) . '</code><br /><span class="description">' . esc_html__( 'домен и поддомены', 'modern-minify' ) . '</span></td>';
+			echo '<td>' . esc_html( MMF_External::reason_label( (string) $reason_key ) ) . '</td>';
+			echo '<td><label><input type="checkbox" checked="checked" disabled="disabled" /> <span class="description">' . esc_html__( 'не редактируется', 'modern-minify' ) . '</span></label></td></tr>';
 		}
 
-		foreach ( MMF_External::DEFAULT_EXCLUDES as $needle ) {
-			$needle = (string) $needle;
-			$reason = isset( $reasons[ $needle ] ) ? $reasons[ $needle ] : __( 'Привязан к домену сайта.', 'modern-minify' );
-
-			echo '<tr><td><code>' . esc_html( $needle ) . '</code></td>';
-			echo '<td>' . esc_html( $reason ) . '</td>';
-			echo '<td><input type="checkbox" checked="checked" disabled="disabled" /></td></tr>';
-		}
-
-		echo '</tbody></table>';
-
-		echo '<h2>' . esc_html__( 'Дополнительные исключения', 'modern-minify' ) . '</h2>';
-		echo '<p class="description">' . esc_html__( 'Хост или часть URL на строку. Снимите «оставить внешним» — строка очистится при сохранении.', 'modern-minify' ) . '</p>';
-
-		echo '<table class="widefat striped mmf-status-table mmf-user-excludes"><thead><tr>';
-		echo '<th>' . esc_html__( 'Хост или часть URL', 'modern-minify' ) . '</th>';
-		echo '<th>' . esc_html__( 'Оставить внешним', 'modern-minify' ) . '</th>';
-		echo '</tr></thead><tbody>';
-
-		$rows   = array_values( array_map( 'strval', $current ) );
-		$rows[] = '';
-
-		foreach ( $rows as $row ) {
-			echo '<tr class="mmf-exclude-row"><td>';
-			echo '<input type="text" class="regular-text code" name="mmf_settings[external_exclude][]" value="' . esc_attr( $row ) . '" />';
-			echo '</td><td><input type="checkbox" class="mmf-exclude-keep" checked="checked" /></td></tr>';
-		}
-
-		echo '</tbody></table>';
+		echo '</tbody></table></section>';
 	}
 
 	/**
-	 * Why each built-in host stays external.
-	 *
-	 * @return array<string,string>
+	 * User exclusions: an editable list with add and remove controls.
 	 */
-	private static function external_reasons(): array {
-		return array(
-			'maps.googleapis.com'      => __( 'Карты: ключ сверяется с Referer.', 'modern-minify' ),
-			'maps.google.com'          => __( 'Карты: ключ сверяется с Referer.', 'modern-minify' ),
-			'maps.yandex'              => __( 'Карты: ключ сверяется с Referer.', 'modern-minify' ),
-			'api-maps.yandex'          => __( 'Карты: ключ сверяется с Referer.', 'modern-minify' ),
-			'api.mapbox.com'           => __( 'Карты: токен привязан к домену.', 'modern-minify' ),
-			'api.2gis'                 => __( 'Карты: ключ привязан к домену.', 'modern-minify' ),
-			'recaptcha'                => __( 'Капча: виджет проверяет Origin.', 'modern-minify' ),
-			'hcaptcha.com'             => __( 'Капча: виджет проверяет Origin.', 'modern-minify' ),
-			'challenges.cloudflare.com' => __( 'Капча: виджет проверяет Origin.', 'modern-minify' ),
-			'turnstile'                => __( 'Капча: виджет проверяет Origin.', 'modern-minify' ),
-			'js.stripe.com'            => __( 'Платёжный виджет: зарегистрирован для одного домена.', 'modern-minify' ),
-			'checkout.stripe.com'      => __( 'Платёжный виджет: зарегистрирован для одного домена.', 'modern-minify' ),
-			'paypal.com/sdk'           => __( 'Платёжный виджет: зарегистрирован для одного домена.', 'modern-minify' ),
-			'paypalobjects.com'        => __( 'Платёжный виджет: зарегистрирован для одного домена.', 'modern-minify' ),
-			'checkout.qiwi.com'        => __( 'Платёжный виджет: зарегистрирован для одного домена.', 'modern-minify' ),
-			'securepay.tinkoff'        => __( 'Платёжный виджет: зарегистрирован для одного домена.', 'modern-minify' ),
-			'yookassa'                 => __( 'Платёжный виджет: зарегистрирован для одного домена.', 'modern-minify' ),
-			'money.yandex'             => __( 'Платёжный виджет: зарегистрирован для одного домена.', 'modern-minify' ),
-			'cleantalk.org'            => __( 'Облачная защита, проверяет домен запроса.', 'modern-minify' ),
-			'fd-cleantalk.org'         => __( 'Облачная защита, проверяет домен запроса.', 'modern-minify' ),
-		);
+	private static function render_user_exclusions(): void {
+		$current = MMF_Config::get( 'external_exclude', array() );
+		$current = is_array( $current ) ? array_values( array_map( 'strval', $current ) ) : array();
+
+		echo '<section class="mmf-card"><h2 class="mmf-section-title">' . esc_html__( 'Свои исключения', 'modern-minify' ) . '</h2>';
+		echo '<p class="description">' . esc_html__( 'Хост или часть URL на строку. Пустые строки при сохранении отбрасываются.', 'modern-minify' ) . '</p>';
+
+		echo '<table class="widefat striped mmf-status-table mmf-user-excludes"><thead><tr>';
+		echo '<th>' . esc_html__( 'Хост или часть URL', 'modern-minify' ) . '</th>';
+		echo '<th>' . esc_html__( 'Действие', 'modern-minify' ) . '</th>';
+		echo '</tr></thead><tbody id="mmf-exclude-rows">';
+
+		foreach ( $current as $row ) {
+			echo self::exclude_row_markup( $row );
+		}
+
+		echo self::exclude_row_markup( '' );
+		echo '</tbody></table>';
+
+		echo '<p><button type="button" class="button mmf-exclude-add">' . esc_html__( 'Добавить исключение', 'modern-minify' ) . '</button></p>';
+
+		echo '<template id="mmf-exclude-template">' . self::exclude_row_markup( '', false ) . '</template>';
+		echo '</section>';
+	}
+
+	/**
+	 * One row of the user exclusion table.
+	 *
+	 * @param string $value Current value.
+	 * @param bool   $named Whether the input carries the option name; the template
+	 *                      row does not, so it is not submitted until cloned.
+	 */
+	private static function exclude_row_markup( string $value, bool $named = true ): string {
+		$name = $named ? ' name="mmf_settings[external_exclude][]"' : '';
+
+		return '<tr class="mmf-exclude-row"><td><input type="text" class="regular-text code"' . $name . ' value="' . esc_attr( $value ) . '" /></td>'
+			. '<td><button type="button" class="button-link mmf-exclude-remove">' . esc_html__( 'Убрать', 'modern-minify' ) . '</button></td></tr>';
 	}
 
 	/**
 	 * Prints the plugin's notices above the form.
 	 */
-	private static function render_notices(): void {
-		if ( isset( $_GET['settings-updated'] ) ) {
-			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Настройки сохранены.', 'modern-minify' ) . '</p></div>';
-		}
-
-		if ( isset( $_GET['mmf-reset'] ) ) {
-			$deleted = (int) sanitize_text_field( wp_unslash( (string) $_GET['mmf-reset'] ) );
-
-			/* translators: %d: number of deleted files. */
-			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html( sprintf( __( 'Кеш очищен, удалено файлов: %d.', 'modern-minify' ), $deleted ) ) . '</p></div>';
-		}
-
-		if ( isset( $_GET['mmf-recommended'] ) ) {
-			$deleted = isset( $_GET['mmf-reset'] ) ? (int) sanitize_text_field( wp_unslash( (string) $_GET['mmf-reset'] ) ) : 0;
-
-			/* translators: %d: number of deleted files. */
-			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html( sprintf( __( 'Рекомендуемые настройки применены, кеш сброшен (удалено файлов: %d).', 'modern-minify' ), $deleted ) ) . '</p></div>';
-		}
-
+	private static function render_alerts(): void {
 		if ( MMF_Conflicts::is_active() ) {
-			echo '<div class="notice notice-error"><p>' . esc_html( MMF_Notices::conflict_message() ) . '</p></div>';
+			echo '<div class="mmf-alert mmf-alert--error" role="alert"><span class="dashicons dashicons-warning" aria-hidden="true"></span><p>' . esc_html( MMF_Notices::conflict_message() ) . '</p></div>';
 		}
 
 		if ( MMF_Config::get( 'test_mode' ) ) {
-			echo '<div class="notice notice-info"><p>' . esc_html__( 'Тестовый режим: оптимизация применяется только к администраторам, посетители видят исходную страницу.', 'modern-minify' ) . '</p></div>';
+			echo '<div class="mmf-alert mmf-alert--info"><span class="dashicons dashicons-visibility" aria-hidden="true"></span><p>' . esc_html__( 'Тестовый режим: оптимизация применяется только к администраторам, посетители видят исходную страницу.', 'modern-minify' ) . '</p></div>';
 		}
+	}
+
+	/**
+	 * Prints the one-time toast of the action that redirected here.
+	 *
+	 * The flag carries a nonce so it cannot be crafted, and the inline JS removes
+	 * it from the URL after the toast appears, so F5 does not repeat the message.
+	 */
+	private static function render_toasts(): void {
+		$type  = isset( $_GET['mmf-toast'] ) ? sanitize_key( wp_unslash( (string) $_GET['mmf-toast'] ) ) : '';
+		$nonce = isset( $_GET['mmf-toast-nonce'] ) ? sanitize_text_field( wp_unslash( (string) $_GET['mmf-toast-nonce'] ) ) : '';
+
+		if ( '' === $type || ! wp_verify_nonce( $nonce, self::TOAST_NONCE ) ) {
+			return;
+		}
+
+		$deleted = isset( $_GET['mmf-reset'] ) ? (int) sanitize_text_field( wp_unslash( (string) $_GET['mmf-reset'] ) ) : 0;
+
+		$messages = array(
+			'reset'       => sprintf( __( 'Кеш очищен и статистика сброшена (удалено файлов: %d).', 'modern-minify' ), $deleted ),
+			'recommended' => sprintf( __( 'Рекомендуемые настройки применены, кеш сброшен (удалено файлов: %d).', 'modern-minify' ), $deleted ),
+			'test-on'     => __( 'Тестовый режим включён.', 'modern-minify' ),
+			'test-off'    => __( 'Тестовый режим выключен.', 'modern-minify' ),
+		);
+
+		$message = isset( $messages[ $type ] ) ? (string) $messages[ $type ] : '';
+
+		if ( '' === $message ) {
+			return;
+		}
+
+		echo self::toast_markup( $type, $message );
+	}
+
+	/**
+	 * Markup of one toast. Public so a fixture can check the roles.
+	 *
+	 * @param string $type    `success` or `error`.
+	 * @param string $message Message.
+	 */
+	public static function toast_markup( string $type, string $message ): string {
+		$error = 'error' === $type;
+		$role  = $error ? 'alert' : 'status';
+		$live  = $error ? 'assertive' : 'polite';
+		$icon  = $error ? 'dashicons-warning' : 'dashicons-yes-alt';
+
+		$html = '<div class="mmf-toasts" id="mmf-toasts" aria-live="' . esc_attr( $live ) . '">';
+		$html .= '<div class="mmf-toast mmf-toast--' . ( $error ? 'error' : 'success' ) . '" data-type="' . ( $error ? 'error' : 'success' ) . '" role="' . esc_attr( $role ) . '">';
+		$html .= '<span class="dashicons ' . $icon . ' mmf-toast__icon" aria-hidden="true"></span>';
+		$html .= '<p class="mmf-toast__text">' . esc_html( $message ) . '</p>';
+		$html .= '<button type="button" class="mmf-toast__close" aria-label="' . esc_attr__( 'Закрыть уведомление', 'modern-minify' ) . '"><span class="dashicons dashicons-no-alt" aria-hidden="true"></span></button>';
+		$html .= '</div></div>';
+
+		return $html;
 	}
 
 	/**
@@ -1106,41 +1313,160 @@ final class MMF_Admin {
 	/**
 	 * Styles of the screen: inline, this screen only.
 	 */
-	private static function inline_css(): string {
-		return '.mmf-wrap .mmf-tabs{margin-bottom:16px}'
-			. '.mmf-wrap .mmf-panel .form-table th{width:260px}'
-			. '.mmf-wrap .mmf-status{display:inline-block;padding:3px 10px;border-radius:3px;background:#edfaef;color:#0a6b1f}'
-			. '.mmf-wrap .mmf-status-table{margin:0 0 12px;max-width:100%}'
-			. '.mmf-wrap .mmf-status-table td:last-child{text-align:right;white-space:nowrap}'
-			. '.mmf-wrap .mmf-status-table td:first-child{width:60%}'
-			. '.mmf-wrap .mmf-features{display:flex;flex-wrap:wrap;gap:4px 18px;margin:8px 0 16px;padding:0;list-style:none}'
-			. '.mmf-wrap .mmf-features li{background:#f0f0f1;border-radius:3px;padding:2px 8px}'
-			. '.mmf-wrap .mmf-status-columns{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;align-items:start;max-width:1180px}'
-			. '.mmf-wrap .mmf-status-card h3{margin:12px 0 6px;font-size:14px}'
-			. '.mmf-wrap .mmf-status-card code{word-break:break-all}'
-			. '.mmf-wrap .mmf-actions{margin-top:16px}'
-			. '@media (max-width:900px){.mmf-wrap .mmf-status-columns{grid-template-columns:1fr}}';
+	public static function inline_css(): string {
+		return <<<'CSS'
+.mmf-wrap{--mmf-bg:#fff;--mmf-surface:#f6f7f7;--mmf-fg:#1d2327;--mmf-muted:#50575e;--mmf-border:#c3c4c7;--mmf-accent:var(--wp-admin-theme-color,#2271b1);--mmf-ok-fg:#0a5c1c;--mmf-ok-bg:#edfaef;--mmf-err-fg:#7a0f0f;--mmf-err-bg:#fcf0f1;--mmf-toast-fg:#1d2327;--mmf-toast-bg:#fff;--mmf-chip-bg:#f6f7f7;--mmf-chip-off-fg:#50575e;--mmf-dot-on:#1a7f37;--mmf-dot-off:#8c8f94;--mmf-popover-bg:#1d2327;--mmf-popover-fg:#f0f0f1;--mmf-popover-muted:#dcdcde;--mmf-badge-bg:#f0f0f1;--mmf-badge-fg:#1d2327;--mmf-radius:8px;--mmf-gap:8px;--mmf-gap-2:16px;--mmf-gap-3:24px;color:var(--mmf-fg);max-width:1400px}
+@media (prefers-color-scheme: dark){.mmf-wrap{--mmf-bg:#1e1e1e;--mmf-surface:#2a2a2a;--mmf-fg:#f0f0f1;--mmf-muted:#c3c4c7;--mmf-border:#50575e;--mmf-ok-fg:#b8f0c3;--mmf-ok-bg:#14351c;--mmf-err-fg:#ffb3b3;--mmf-err-bg:#3d1414;--mmf-toast-fg:#f0f0f1;--mmf-toast-bg:#2a2a2a;--mmf-chip-bg:#2a2a2a;--mmf-chip-off-fg:#c3c4c7;--mmf-dot-on:#7bd88f;--mmf-badge-bg:#2a2a2a;--mmf-badge-fg:#f0f0f1;}}
+body.admin-color-midnight .mmf-wrap{--mmf-bg:#1e1e1e;--mmf-surface:#2a2a2a;--mmf-fg:#f0f0f1;--mmf-muted:#c3c4c7;--mmf-border:#50575e;--mmf-ok-fg:#b8f0c3;--mmf-ok-bg:#14351c;--mmf-err-fg:#ffb3b3;--mmf-err-bg:#3d1414;--mmf-toast-fg:#f0f0f1;--mmf-toast-bg:#2a2a2a;--mmf-chip-bg:#2a2a2a;--mmf-chip-off-fg:#c3c4c7;--mmf-dot-on:#7bd88f;--mmf-badge-bg:#2a2a2a;--mmf-badge-fg:#f0f0f1;}
+.mmf-wrap .mmf-tabs{margin-bottom:var(--mmf-gap-2)}
+.mmf-wrap .nav-tab{border-radius:0;background:transparent}
+.mmf-wrap .nav-tab-active,.mmf-wrap .nav-tab-active:hover{background:var(--mmf-bg);border-bottom-color:var(--mmf-bg)}
+.mmf-wrap .mmf-panel .form-table th{width:260px}
+.mmf-wrap .mmf-card{background:var(--mmf-bg);border:1px solid var(--mmf-border);border-radius:var(--mmf-radius);padding:var(--mmf-gap-2);margin:0 0 var(--mmf-gap-2)}
+.mmf-wrap .mmf-section-title{margin:0 0 var(--mmf-gap);font-size:13px;line-height:1.4;text-transform:uppercase;letter-spacing:.04em;color:var(--mmf-muted);font-weight:600}
+.mmf-wrap .mmf-status{display:inline-block;padding:4px 12px;border-radius:999px;background:var(--mmf-ok-bg);color:var(--mmf-ok-fg);margin:0 0 var(--mmf-gap-2)}
+.mmf-wrap .mmf-status--on{background:var(--mmf-ok-bg);color:var(--mmf-ok-fg)}
+.mmf-wrap .mmf-last-action__text{margin:0 0 4px;font-size:14px}
+.mmf-wrap .mmf-chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--mmf-gap-2);margin:0 0 var(--mmf-gap-3)}
+.mmf-wrap .mmf-chips-list{display:flex;flex-wrap:wrap;gap:var(--mmf-gap);margin:0;padding:0;list-style:none}
+.mmf-wrap .mmf-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid var(--mmf-border);border-radius:999px;background:var(--mmf-chip-bg);color:var(--mmf-fg);font-size:13px;line-height:1.6}
+.mmf-wrap .mmf-chip__icon{font-size:16px;width:16px;height:16px;color:var(--mmf-muted)}
+.mmf-wrap .mmf-chip__dot{width:8px;height:8px;border-radius:50%;background:var(--mmf-dot-off);flex:0 0 auto}
+.mmf-wrap .mmf-chip--on .mmf-chip__dot{background:var(--mmf-dot-on)}
+.mmf-wrap .mmf-chip--off .mmf-chip__label{color:var(--mmf-chip-off-fg)}
+.mmf-wrap .mmf-status-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--mmf-gap-2);align-items:start}
+.mmf-wrap .mmf-status-card{margin:0}
+.mmf-wrap .mmf-status-card code{word-break:break-all}
+.mmf-wrap .mmf-metrics{display:grid;gap:var(--mmf-gap);margin:0}
+.mmf-wrap .mmf-metric{display:flex;justify-content:space-between;align-items:baseline;gap:var(--mmf-gap-2);padding-bottom:var(--mmf-gap);border-bottom:1px solid var(--mmf-border)}
+.mmf-wrap .mmf-metric:last-child{border-bottom:0;padding-bottom:0}
+.mmf-wrap .mmf-metric__label{margin:0;color:var(--mmf-muted);font-size:13px}
+.mmf-wrap .mmf-metric__value{margin:0;font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--mmf-fg);text-align:right}
+.mmf-wrap .mmf-actions{margin:var(--mmf-gap-2) 0 0}
+.mmf-wrap .mmf-toasts{position:fixed;top:48px;right:var(--mmf-gap-2);z-index:100000;display:flex;flex-direction:column;gap:var(--mmf-gap);max-width:360px}
+.mmf-wrap .mmf-toast{display:flex;gap:var(--mmf-gap);align-items:flex-start;background:var(--mmf-toast-bg);color:var(--mmf-toast-fg);border:1px solid var(--mmf-border);border-radius:var(--mmf-radius);padding:12px 16px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.mmf-wrap .mmf-toast--error{border-color:var(--mmf-err-fg);background:var(--mmf-err-bg);color:var(--mmf-err-fg)}
+.mmf-wrap .mmf-toast__text{margin:0;flex:1}
+.mmf-wrap .mmf-toast__close{border:0;background:transparent;color:inherit;cursor:pointer;padding:0;line-height:1}
+.mmf-wrap .mmf-toast__icon{margin-top:2px}
+.mmf-wrap .mmf-alert{display:flex;gap:var(--mmf-gap);align-items:flex-start;border:1px solid var(--mmf-border);border-radius:var(--mmf-radius);padding:12px 16px;margin:0 0 var(--mmf-gap-2);background:var(--mmf-surface);color:var(--mmf-fg)}
+.mmf-wrap .mmf-alert--error{border-color:var(--mmf-err-fg);background:var(--mmf-err-bg);color:var(--mmf-err-fg)}
+.mmf-wrap .mmf-alert p{margin:0}
+.mmf-wrap .mmf-badge{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;background:var(--mmf-badge-bg);color:var(--mmf-badge-fg);font-size:11px;line-height:1.7;vertical-align:middle;white-space:nowrap}
+.mmf-wrap .mmf-card .widefat{width:100%;max-width:100%}
+.mmf-wrap .mmf-report-table{table-layout:fixed;width:100%;border-collapse:collapse}
+.mmf-wrap .mmf-report-table th:first-child,.mmf-wrap .mmf-report-table td:first-child{width:60%}
+.mmf-wrap .mmf-report-table th:last-child,.mmf-wrap .mmf-report-table td:last-child{width:40%;text-align:left}
+.mmf-wrap .mmf-report-table td{padding:8px 0;border-top:1px solid var(--mmf-border);vertical-align:top;overflow-wrap:anywhere}
+.mmf-wrap .mmf-report-table thead th{text-align:left}
+.mmf-wrap .mmf-badge--status{margin-left:0}
+.mmf-wrap .mmf-help{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;border:1px solid var(--mmf-border);background:var(--mmf-bg);color:var(--mmf-muted);cursor:pointer;margin-left:var(--mmf-gap);vertical-align:middle;padding:0}
+.mmf-wrap .mmf-help .dashicons{font-size:18px;width:18px;height:18px}
+.mmf-wrap .mmf-popover{position:absolute;max-width:320px;background:var(--mmf-popover-bg);color:var(--mmf-popover-fg);border-radius:var(--mmf-radius);padding:var(--mmf-gap-2);box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:100001;font-size:13px}
+.mmf-wrap .mmf-popover[hidden]{display:none}
+.mmf-wrap .mmf-popover::after{content:"";position:absolute;top:-6px;left:var(--mmf-arrow-x,24px);width:12px;height:12px;background:var(--mmf-popover-bg);transform:rotate(45deg)}
+.mmf-wrap .mmf-popover h4{margin:0 0 var(--mmf-gap);color:var(--mmf-popover-fg);font-size:13px;text-transform:uppercase;letter-spacing:.04em}
+.mmf-wrap .mmf-popover ul{margin:0 0 var(--mmf-gap-2);padding-left:16px}
+.mmf-wrap .mmf-popover li{margin:0 0 4px}
+.mmf-wrap .mmf-popover__note{color:var(--mmf-popover-muted);margin:0 0 var(--mmf-gap-2)}
+.mmf-wrap .mmf-popover__actions{display:flex;gap:var(--mmf-gap);margin:0}
+.mmf-wrap :focus-visible{outline:2px solid var(--mmf-accent);outline-offset:2px}
+@media (max-width:1199px){.mmf-wrap .mmf-status-columns,.mmf-wrap .mmf-chips{grid-template-columns:1fr}}
+@media (max-width:899px){.mmf-wrap .mmf-report-table thead{display:none}.mmf-wrap .mmf-report-table tr{display:block;border-top:1px solid var(--mmf-border);padding:8px 0}.mmf-wrap .mmf-report-table td{display:block;width:auto;border:0;padding:2px 0}.mmf-wrap .mmf-report-table td:first-child,.mmf-wrap .mmf-report-table td:last-child{width:auto}}
+@media (max-width:782px){.mmf-wrap .mmf-toasts{top:62px;left:var(--mmf-gap-2);right:var(--mmf-gap-2);max-width:none}}
+@media (prefers-reduced-motion: no-preference){.mmf-wrap .mmf-toast{animation:mmf-toast-in .18s ease-out}}
+@keyframes mmf-toast-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+CSS;
 	}
 
 	/**
-	 * The screen's behaviour: confirm before wiping the cache, and let a row of
-	 * the exclusion table be dropped by unchecking its switch.
+	 * Pairs of CSS custom properties whose contrast must stay readable.
+	 *
+	 * The fixture reads the values from `inline_css()` and computes the ratio; a
+	 * pair below 4.5:1 fails the build.
+	 *
+	 * @return array<int,array{fg:string,bg:string,label:string}>
+	 */
+	public static function contrast_pairs(): array {
+		return array(
+			array( 'fg' => '--mmf-fg', 'bg' => '--mmf-bg', 'label' => 'body text' ),
+			array( 'fg' => '--mmf-muted', 'bg' => '--mmf-bg', 'label' => 'muted text' ),
+			array( 'fg' => '--mmf-fg', 'bg' => '--mmf-surface', 'label' => 'text on surface' ),
+			array( 'fg' => '--mmf-muted', 'bg' => '--mmf-surface', 'label' => 'muted on surface' ),
+			array( 'fg' => '--mmf-ok-fg', 'bg' => '--mmf-ok-bg', 'label' => 'active status' ),
+			array( 'fg' => '--mmf-err-fg', 'bg' => '--mmf-err-bg', 'label' => 'error status' ),
+			array( 'fg' => '--mmf-toast-fg', 'bg' => '--mmf-toast-bg', 'label' => 'toast' ),
+			array( 'fg' => '--mmf-chip-off-fg', 'bg' => '--mmf-chip-bg', 'label' => 'disabled chip' ),
+			array( 'fg' => '--mmf-fg', 'bg' => '--mmf-chip-bg', 'label' => 'chip' ),
+			array( 'fg' => '--mmf-popover-fg', 'bg' => '--mmf-popover-bg', 'label' => 'popover' ),
+			array( 'fg' => '--mmf-popover-muted', 'bg' => '--mmf-popover-bg', 'label' => 'popover note' ),
+			array( 'fg' => '--mmf-badge-fg', 'bg' => '--mmf-badge-bg', 'label' => 'recommended badge' ),
+		);
+	}
+
+	/**
+	 * The screen's behaviour: toasts, the recommended-settings popover, the reset
+	 * confirmation and the exclusion-table switches.
 	 */
 	private static function inline_js(): string {
-		$prompt = (string) wp_json_encode( __( 'Очистить весь кеш минифицированных файлов, шрифтов и стилей?', 'modern-minify' ) );
-
-		return '(function(){var links=document.querySelectorAll(".mmf-reset");'
-			. 'for(var i=0;i<links.length;i++){links[i].addEventListener("click",function(event){'
-			. 'if(!window.confirm(' . $prompt . ')){event.preventDefault();}});}'
-			. 'var rec=document.querySelectorAll(".mmf-recommended");'
-			. 'for(var r=0;r<rec.length;r++){rec[r].addEventListener("click",function(event){'
-			. 'var text=this.getAttribute("data-confirm")||"";'
-			. 'if(text&&!window.confirm(text)){event.preventDefault();}});}'
-			. 'var rows=document.querySelectorAll(".mmf-exclude-row");'
-			. 'for(var j=0;j<rows.length;j++){(function(row){'
-			. 'var box=row.querySelector(".mmf-exclude-keep"),input=row.querySelector("input[type=text]");'
-			. 'if(!box||!input){return}'
-			. 'box.addEventListener("change",function(){if(!box.checked){input.value="";}});'
-			. '})(rows[j]);}})();';
+		$js = <<<'JS'
+(function(){
+var toastBox=document.getElementById("mmf-toasts");
+if(toastBox){
+  var toasts=toastBox.querySelectorAll(".mmf-toast");
+  for(var i=0;i<toasts.length;i++){(function(t){
+    var type=t.getAttribute("data-type")||"success",timer=null;
+    function close(){if(t.parentNode){t.parentNode.removeChild(t);if(!toastBox.querySelectorAll(".mmf-toast").length){toastBox.setAttribute("hidden","hidden");}}}
+    function start(){if("error"===type){return}timer=setTimeout(close,8000);}
+    function pause(){if(timer){clearTimeout(timer);timer=null;}}
+    var button=t.querySelector(".mmf-toast__close");
+    if(button){button.addEventListener("click",close);}
+    t.addEventListener("mouseenter",pause);
+    t.addEventListener("mouseleave",start);
+    t.addEventListener("focusin",pause);
+    t.addEventListener("focusout",start);
+    start();
+  })(toasts[i]);}
+  document.addEventListener("keydown",function(event){if("Escape"===event.key){var left=toastBox.querySelectorAll(".mmf-toast");for(var k=0;k<left.length;k++){if(left[k].parentNode){left[k].parentNode.removeChild(left[k]);}}}});
+  if(window.history&&history.replaceState){
+    try{var url=new URL(window.location.href);["mmf-toast","mmf-toast-nonce","mmf-reset","mmf-recommended"].forEach(function(k){url.searchParams.delete(k);});history.replaceState(null,"",url.toString());}catch(e){}
+  }
+}
+var help=document.querySelector(".mmf-help"),pop=document.getElementById("mmf-recommended-popover");
+if(help&&pop){
+  var apply=document.querySelector(".mmf-recommended");
+  function place(){
+    var r=help.getBoundingClientRect(),w=Math.min(320,window.innerWidth-32);
+    var left=Math.min(r.right-w,window.innerWidth-16-w);left=Math.max(16,left);
+    var top=r.bottom+8;
+    if(top+pop.offsetHeight>window.innerHeight-16){top=Math.max(16,r.top-pop.offsetHeight-8);}
+    pop.style.left=(left+window.scrollX)+"px";
+    pop.style.top=(top+window.scrollY)+"px";
+    pop.style.setProperty("--mmf-arrow-x",(r.left+r.width/2-left)+"px");
+  }
+  function open(){pop.hidden=false;help.setAttribute("aria-expanded","true");place();}
+  function close(focusBack){pop.hidden=true;help.setAttribute("aria-expanded","false");if(focusBack){help.focus();}}
+  help.addEventListener("click",function(event){event.preventDefault();if("true"===help.getAttribute("aria-expanded")){close(false);}else{open();}});
+  help.addEventListener("mouseenter",function(){if(pop.hidden){open();}});
+  help.addEventListener("focus",function(){if(pop.hidden){open();}});
+  if(apply){apply.addEventListener("click",function(event){if(pop.hidden){event.preventDefault();open();}});}
+  var cancel=pop.querySelector(".mmf-popover__cancel");
+  if(cancel){cancel.addEventListener("click",function(){close(true);});}
+  document.addEventListener("keydown",function(event){if("Escape"===event.key&&!pop.hidden){close(true);}});
+  document.addEventListener("click",function(event){if(!pop.hidden&&!pop.contains(event.target)&&!help.contains(event.target)){close(false);}});
+}
+var links=document.querySelectorAll(".mmf-reset");
+for(var j=0;j<links.length;j++){links[j].addEventListener("click",function(event){if(!window.confirm(__MMF_RESET_PROMPT__)){event.preventDefault();}});}
+var addRow=document.querySelector(".mmf-exclude-add"),tpl=document.getElementById("mmf-exclude-template"),rowsBox=document.getElementById("mmf-exclude-rows");
+if(addRow&&tpl&&rowsBox){addRow.addEventListener("click",function(){var clone=tpl.content.cloneNode(true),field=clone.querySelector("input");if(field){field.name="mmf_settings[external_exclude][]";}rowsBox.appendChild(clone);});}
+if(rowsBox){rowsBox.addEventListener("click",function(event){
+  var button=event.target.closest?event.target.closest(".mmf-exclude-remove"):null;
+  if(!button){return}
+  var row=button.closest("tr");
+  if(row){row.parentNode.removeChild(row);}
+});}
+})();
+JS;
+		return str_replace( '__MMF_RESET_PROMPT__', (string) wp_json_encode( __( 'Очистить весь кеш минифицированных файлов, шрифтов и стилей?', 'modern-minify' ) ), $js );
 	}
 }
