@@ -91,9 +91,20 @@ final class MMF_Merge {
 		$stats['css_before'] = self::count_stylesheets( $html );
 
 		$tokens = MMF_HTML::tokenize( $html );
+
+		if ( ! empty( $settings['merge_js'] ) ) {
+			foreach ( $tokens as $probe ) {
+				if ( 'tag' === $probe['type'] && ! $probe['closing'] && 'script' === $probe['name'] && self::is_hard_excluded_tag( (string) $probe['raw'] ) ) {
+					$settings['merge_js'] = false;
+					break;
+				}
+			}
+		}
+
 		$count  = count( $tokens );
 		$out    = '';
 		$index  = 0;
+		$after_hard = false;
 
 		while ( $index < $count ) {
 			$token = $tokens[ $index ];
@@ -105,9 +116,17 @@ final class MMF_Merge {
 			}
 
 
+			if ( 'script' === (string) $token['name'] && self::is_hard_excluded_tag( (string) $token['raw'] ) ) {
+				$out .= (string) $token['raw'];
+				$after_hard = true;
+				$index++;
+				continue;
+			}
+
 			$group = self::group( $tokens, $index, $settings );
 
-			if ( null === $group ) {
+			if ( null === $group || $after_hard ) {
+				$after_hard = false;
 				$out  .= (string) $token['raw'];
 				$index++;
 				continue;
@@ -205,6 +224,12 @@ final class MMF_Merge {
 				break;
 			}
 
+			// A script that must never be merged (jQuery and friends) sitting in
+			// the run aborts the whole group instead of splitting it.
+			if ( 'script' === (string) $tokens[ $index ]['name'] && self::is_hard_excluded_tag( (string) $tokens[ $index ]['raw'] ) ) {
+				return null;
+			}
+
 			$next = self::candidate( $tokens, $index, $settings );
 
 			if ( null === $next || $next['type'] !== $type || $next['media'] !== $media ) {
@@ -225,6 +250,29 @@ final class MMF_Merge {
 			'last'  => $last,
 			'type'  => $type,
 		);
+	}
+
+	/**
+	 * Whether a script tag contains a hard-excluded dependency.
+	 *
+	 * @param string $raw Tag markup.
+	 */
+	private static function is_hard_excluded_tag( string $raw ): bool {
+		$attrs = MMF_Assets::attributes( $raw );
+		$src   = strtolower( (string) ( $attrs['src'] ?? '' ) );
+		$type  = strtolower( trim( (string) ( $attrs['type'] ?? '' ) ) );
+
+		if ( str_contains( $type, 'module' ) ) {
+			return true;
+		}
+
+		foreach ( MMF_Loader::HARD_EXCLUDES as $needle ) {
+			if ( str_contains( $src, $needle ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**

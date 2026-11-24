@@ -34,6 +34,10 @@ final class MMF_Images {
 
 	public const JOBS_OPTION = 'mmf_webp_jobs';
 	public const VIEW_LOCK = 'mmf_webp_view_lock';
+	public const CRON_HOOK = 'mmf_webp_process';
+	public const LAST_QUEUE_OPTION = 'mmf_webp_last_queue';
+	public const LAST_CRON_OPTION = 'mmf_webp_last_cron';
+	public const LAST_CRON_COUNT = 'mmf_webp_last_cron_count';
 
 	/**
 	 * Detected converter, `null` until first use.
@@ -77,6 +81,9 @@ final class MMF_Images {
 		add_action( 'delete_attachment', array( __CLASS__, 'on_delete' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'maybe_buffer' ), 2 );
 		add_action( 'shutdown', array( __CLASS__, 'process_queue' ) );
+		add_action( 'init', array( __CLASS__, 'sync_cron' ) );
+		add_action( self::CRON_HOOK, array( __CLASS__, 'cron_process' ) );
+		add_filter( 'cron_schedules', array( __CLASS__, 'cron_schedules' ) );
 		add_action( 'shutdown', array( __CLASS__, 'flush_stats' ) );
 	}
 
@@ -628,7 +635,7 @@ final class MMF_Images {
 	 * Converts at most two queued files after the response, under a lock.
 	 */
 	public static function process_queue(): void {
-		if ( is_admin() || ! (bool) MMF_Config::get( 'image_webp_ondemand', false ) ) {
+		if ( ! (bool) MMF_Config::get( 'image_webp_ondemand', false ) ) {
 			return;
 		}
 
@@ -660,6 +667,7 @@ final class MMF_Images {
 			update_option( self::JOBS_OPTION, array_values( $jobs ), false );
 		}
 
+		update_option( self::LAST_QUEUE_OPTION, time(), false );
 		delete_option( self::VIEW_LOCK );
 	}
 
@@ -735,11 +743,15 @@ final class MMF_Images {
 	 * Starts the output buffer when serving can change something.
 	 */
 	public static function maybe_buffer(): void {
-		if ( self::$buffering || is_admin() || wp_doing_cron() ) {
+		if ( self::$buffering || is_admin() || wp_doing_cron() || ob_get_level() > 0 ) {
 			return;
 		}
 
-		if ( ! (bool) MMF_Config::get( 'image_webp', true ) || ! self::accepts_webp() ) {
+		if ( ! (bool) MMF_Config::get( 'image_webp', true ) ) {
+			return;
+		}
+
+		if ( (bool) MMF_Config::get( 'webp_require_accept', false ) && ! self::accepts_webp() ) {
 			return;
 		}
 
@@ -896,6 +908,75 @@ final class MMF_Images {
 		}
 
 		return array( 'files' => $files, 'bytes' => $bytes );
+	}
+
+	/**
+	 * Five-minute schedule for the cron fallback.
+	 *
+	 * @param array<string,array<string,mixed>> $schedules Schedules.
+	 * @return array<string,array<string,mixed>>
+	 */
+	public static function cron_schedules( $schedules ): array {
+		$schedules = is_array( $schedules ) ? $schedules : array();
+		$schedules['mmf_five_minutes'] = array( 'interval' => 300, 'display' => __( 'Modern Minify: каждые 5 минут', 'modern-minify' ) );
+
+		return $schedules;
+	}
+
+	/**
+	 * Schedules or clears the fallback depending on the option.
+	 */
+	public static function sync_cron(): void {
+		$on = (bool) MMF_Config::get( 'image_webp_ondemand', false );
+
+		if ( $on && ! wp_next_scheduled( self::CRON_HOOK ) ) {
+			wp_schedule_event( time() + 300, 'mmf_five_minutes', self::CRON_HOOK );
+		} elseif ( ! $on && wp_next_scheduled( self::CRON_HOOK ) ) {
+			wp_clear_scheduled_hook( self::CRON_HOOK );
+		}
+	}
+
+	/**
+	 * Cron fallback: ten queued files, then a scan of recent uploads.
+	 */
+	public static function cron_process(): void {
+		if ( ! (bool) MMF_Config::get( 'image_webp_ondemand', false ) ) {
+			return;
+		}
+
+		$jobs = get_option( self::JOBS_OPTION, array() );
+		$jobs = is_array( $jobs ) ? $jobs : array();
+		$done = 0;
+
+		if ( array() !== $jobs ) {
+			$chunk = array_splice( $jobs, 0, 10 );
+
+			foreach ( $chunk as $file ) {
+				if ( is_string( $file ) && is_file( $file ) && ! self::usable_sidecar( $file ) ) {
+					self::convert_file( $file );
+					$done++;
+				}
+			}
+
+			if ( array() === $jobs ) {
+				delete_option( self::JOBS_OPTION );
+			} else {
+				update_option( self::JOBS_OPTION, array_values( $jobs ), false );
+			}
+		} else {
+			$ids = get_posts( array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'post_mime_type' => array( 'image/jpeg', 'image/png' ), 'fields' => 'ids', 'posts_per_page' => 10, 'no_found_rows' => true ) );
+
+			foreach ( (array) $ids as $id ) {
+				if ( self::needs_sidecar( (int) $id ) ) {
+					self::convert_attachment( (int) $id );
+					$done++;
+				}
+			}
+		}
+
+		update_option( self::LAST_CRON_OPTION, time(), false );
+		update_option( self::LAST_CRON_COUNT, $done, false );
+		update_option( self::LAST_QUEUE_OPTION, time(), false );
 	}
 
 	/**

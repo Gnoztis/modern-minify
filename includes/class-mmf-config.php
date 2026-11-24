@@ -335,6 +335,10 @@ final class MMF_Config {
 				'type'    => 'bool',
 				'default' => false,
 			),
+			'webp_require_accept'    => array(
+				'type'    => 'bool',
+				'default' => false,
+			),
 			// Test mode: the pipeline runs only for administrators, so the site
 			// owner can look at the result on the live site without risking
 			// visitors.

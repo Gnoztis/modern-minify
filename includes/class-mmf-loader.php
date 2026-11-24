@@ -73,7 +73,7 @@ final class MMF_Loader {
 	 * page depends on it being there. `wp-i18n` and `wp-hooks` carry the
 	 * translations and the hooks other inline scripts expect to find.
 	 */
-	public const HARD_EXCLUDES = array( 'jquery', 'wp-i18n', 'wp-hooks' );
+	public const HARD_EXCLUDES = array( 'jquery', 'jquery-core', 'jquery-migrate', 'wp-i18n', 'wp-hooks', 'wp-polyfill' );
 
 	/**
 	 * Events that count as the first interaction.

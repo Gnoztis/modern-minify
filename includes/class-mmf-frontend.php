@@ -149,7 +149,13 @@ final class MMF_Frontend {
 
 		$this->done = true;
 
-		return $this->process( $html );
+		$out = $this->process( $html );
+
+		if ( class_exists( 'MMF_Images' ) && (bool) MMF_Config::get( 'image_webp', true ) ) {
+			$out = MMF_Images::rewrite_html( $out );
+		}
+
+		return $out;
 	}
 
 	/**

@@ -170,9 +170,15 @@ final class MMF_Avatars {
 	 * @param string $url Avatar URL.
 	 */
 	public static function webp_url( string $url ): string {
-		if ( '' === $url || str_starts_with( $url, 'data:' ) || ! self::accepts_webp() ) {
+		if ( '' === $url || str_starts_with( $url, 'data:' ) ) {
 			return $url;
 		}
+
+		if ( ! self::accepts_webp() ) {
+			return $url;
+		}
+
+		MMF_Stats::increment( 'avatar_found' );
 
 		if ( isset( self::$done[ $url ] ) ) {
 			return self::$done[ $url ];
@@ -182,12 +188,16 @@ final class MMF_Avatars {
 		$ext  = strtolower( (string) pathinfo( $path, PATHINFO_EXTENSION ) );
 
 		if ( ! in_array( $ext, array( 'jpg', 'jpeg', 'png' ), true ) ) {
+			MMF_Stats::increment( 'avatar_fail_type' );
+
 			return $url;
 		}
 
 		$file = MMF_Assets::resolve_path( $url, $ext );
 
 		if ( '' === $file || ! is_file( $file ) ) {
+			MMF_Stats::increment( MMF_Assets::is_local_url( $url ) ? 'avatar_fail_missing' : 'avatar_fail_external' );
+
 			return $url;
 		}
 
@@ -201,6 +211,7 @@ final class MMF_Avatars {
 
 			if ( ! $ok || ! is_file( $sidecar ) ) {
 				self::$errors++;
+				MMF_Stats::increment( '' === MMF_Images::method() ? 'avatar_fail_support' : 'avatar_fail_write' );
 				MMF_Stats::increment( 'avatar_missing' );
 				self::$done[ $url ] = $url;
 
@@ -219,8 +230,15 @@ final class MMF_Avatars {
 
 		$webp = $photo . '.webp' . ( '' !== $query ? '?' . $query : '' );
 
+		MMF_Stats::increment( 'avatar_sidecar' );
 		self::$converted++;
 		self::$saved += max( 0, (int) filesize( $file ) - (int) filesize( $sidecar ) );
+		$known = (array) get_option( 'mmf_avatar_paths', array() );
+
+		if ( ! in_array( $file, $known, true ) ) {
+			$known[] = $file;
+			update_option( 'mmf_avatar_paths', array_slice( $known, -500 ), false );
+		}
 		self::$done[ $url ] = $webp;
 
 		return $webp;
@@ -230,6 +248,10 @@ final class MMF_Avatars {
 	 * Whether the visitor accepts WebP.
 	 */
 	private static function accepts_webp(): bool {
+		if ( ! (bool) MMF_Config::get( 'webp_require_accept', false ) ) {
+			return true;
+		}
+
 		$accept = isset( $_SERVER['HTTP_ACCEPT'] ) ? (string) $_SERVER['HTTP_ACCEPT'] : '';
 
 		return '' !== $accept && false !== stripos( $accept, 'image/webp' );

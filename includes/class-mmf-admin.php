@@ -45,6 +45,7 @@ final class MMF_Admin {
 	private const WEBP_NONCE = 'mmf_delete_webp';
 	private const BULK_NONCE = 'mmf_webp_bulk';
 	private const CSS_ACTION_NONCE = 'mmf_css_action';
+	private const AVATARS_NONCE = 'mmf_convert_avatars';
 	public const BULK_OPTION = 'mmf_webp_queue';
 	public const BULK_LOCK = 'mmf_webp_lock';
 	private const BULK_TTL = 300;
@@ -77,6 +78,7 @@ final class MMF_Admin {
 		add_action( 'admin_post_mmf_apply_advice', array( __CLASS__, 'handle_apply_advice' ) );
 		add_action( 'admin_init', array( __CLASS__, 'handle_delete_webp' ) );
 		add_action( 'admin_post_mmf_css_action', array( __CLASS__, 'handle_css_action' ) );
+		add_action( 'admin_init', array( __CLASS__, 'handle_convert_avatars' ) );
 		add_action( 'wp_ajax_mmf_webp_start', array( __CLASS__, 'ajax_webp_start' ) );
 		add_action( 'wp_ajax_mmf_webp_batch', array( __CLASS__, 'ajax_webp_batch' ) );
 		add_action( 'wp_ajax_mmf_webp_status', array( __CLASS__, 'ajax_webp_status' ) );
@@ -373,7 +375,9 @@ final class MMF_Admin {
 			ob_start();
 
 			printf(
-				'<div class="mmf-panel" id="mmf-panel-%s"%s>',
+				'<div class="mmf-panel%s" id="mmf-panel-%s" data-tab="%s"%s>',
+				$slug === $tab ? '' : ' mmf-panel--hidden',
+				esc_attr( (string) $slug ),
 				esc_attr( (string) $slug ),
 				$slug === $tab ? '' : ' style="display:none"'
 			);
@@ -460,7 +464,7 @@ final class MMF_Admin {
 			'external'   => array(),
 			'settings'   => array( 'minify_html', 'minify_inline', 'disable_when_logged_in', 'remove_generator', 'remove_emoji', 'ver_mode', 'disable_gravatar' ),
 			'advisor'    => array(),
-			'images'     => array( 'image_webp', 'image_webp_ondemand', 'image_quality_jpeg', 'image_png_lossless', 'image_quality_png', 'avatar_webp', 'avatar_quality' ),
+			'images'     => array( 'image_webp', 'image_webp_ondemand', 'webp_require_accept', 'image_quality_jpeg', 'image_png_lossless', 'image_quality_png', 'avatar_webp', 'avatar_quality' ),
 			'advanced'   => array( 'cache_ttl', 'cache_max_files', 'cache_max_size', 'test_mode', 'debug', 'merge_max_files', 'merge_max_size' ),
 		);
 	}
@@ -644,9 +648,13 @@ final class MMF_Admin {
 				__( 'Создавать WebP для загруженных картинок', 'modern-minify' ),
 				__( 'Рядом с JPEG/PNG появляется файл .webp; оригинал не меняется и не удаляется. Отдаётся только браузерам с Accept: image/webp.', 'modern-minify' ),
 			),
+			'webp_require_accept'    => array(
+				__( 'Отдавать WebP только с Accept: image/webp', 'modern-minify' ),
+				__( 'Выключено: копия отдаётся всем, если она существует. Включайте только если HTML не кешируется снаружи: при кеше первый запрос без WebP закрепит обычные картинки для всех.', 'modern-minify' ),
+			),
 			'image_webp_ondemand'    => array(
-				__( 'Конвертировать при первом просмотре', 'modern-minify' ),
-				__( 'Если свежей копии нет, файл ставится в очередь и конвертируется после ответа (1–2 за запрос, под замком). Посетитель ждёт оригинал, библиотека наполняется сама. Выключено по умолчанию.', 'modern-minify' ),
+				__( 'Конвертировать при первом просмотре (работает, когда страницу отдаёт PHP)', 'modern-minify' ),
+				__( 'Ставит файл в очередь после ответа (1–2 за запрос) и добавляет cron-догон раз в 5 минут. На сайте с полным кешем страниц PHP исполняется редко — надёжнее массовая конвертация. Выключено по умолчанию.', 'modern-minify' ),
 			),
 			'image_quality_jpeg'     => array(
 				__( 'Качество WebP для JPEG', 'modern-minify' ),
@@ -1483,6 +1491,7 @@ final class MMF_Admin {
 			'advice'      => __( 'Выбранные шаблоны добавлены в список, кеш сброшен.', 'modern-minify' ),
 			'webp-deleted' => __( 'Сгенерированные WebP удалены.', 'modern-minify' ),
 			'css-action'  => __( 'Действие применено, кеш сброшен.', 'modern-minify' ),
+			'avatars'     => __( 'Аватары обработаны.', 'modern-minify' ),
 		);
 
 		$message = isset( $messages[ $type ] ) ? (string) $messages[ $type ] : '';
@@ -1872,48 +1881,114 @@ final class MMF_Admin {
 	 *
 	 * @param array<string,mixed> $result Method result.
 	 */
+	/**
+	 * Human error payload for the bulk AJAX endpoints.
+	 *
+	 * @param string $code   Machine code.
+	 * @param string $detail Optional technical detail.
+	 * @return array<string,string>
+	 */
+	private static function bulk_error( string $code, string $detail = '' ): array {
+		$map = array(
+			'nonce_expired'     => array( __( 'Истёк токен безопасности.', 'modern-minify' ), __( 'Обновите страницу и запустите снова.', 'modern-minify' ) ),
+			'forbidden'         => array( __( 'Недостаточно прав.', 'modern-minify' ), __( 'Войдите под администратором сайта.', 'modern-minify' ) ),
+			'busy'              => array( __( 'Уже идёт другая конвертация.', 'modern-minify' ), __( 'Дождитесь завершения или нажмите «Остановить».', 'modern-minify' ) ),
+			'converter_missing' => array( __( 'Нет WebP в PHP.', 'modern-minify' ), __( 'Включите GD с IMG_WEBP, Imagick или установите cwebp.', 'modern-minify' ) ),
+			'file_error'        => array( __( 'Не удалось прочитать файл картинки.', 'modern-minify' ), __( 'Проверьте права на uploads и сам файл.', 'modern-minify' ) ),
+			'timeout'           => array( __( 'Сервер не ответил вовремя.', 'modern-minify' ), __( 'Уменьшите пакет или повторите позже.', 'modern-minify' ) ),
+			'exception'         => array( __( 'Ошибка сервера при конвертации.', 'modern-minify' ), __( 'Смотрите журнал ошибок PHP.', 'modern-minify' ) ),
+		);
+
+		$pair = $map[ $code ] ?? array( __( 'Не удалось выполнить пакет.', 'modern-minify' ), __( 'Попробуйте ещё раз.', 'modern-minify' ) );
+
+		return array( 'error' => $code, 'message' => $pair[0], 'hint' => $pair[1], 'detail' => $detail );
+	}
+
+	/**
+	 * Sends a bulk result or a readable error.
+	 *
+	 * @param array<string,mixed> $result Method result.
+	 */
 	private static function send_bulk( array $result ): void {
 		if ( isset( $result['error'] ) ) {
-			wp_send_json_error( array( 'code' => (string) $result['error'] ) );
+			$code = (string) $result['error'];
+			$error = self::bulk_error( in_array( $code, array( 'nonce_expired', 'forbidden', 'busy', 'converter_missing', 'file_error', 'timeout', 'exception' ), true ) ? $code : 'exception' );
+
+			wp_send_json_error( $error );
 		}
 
 		wp_send_json_success( $result );
 	}
 
 	/**
+	 * Verifies AJAX nonce and capability with readable errors.
+	 *
+	 * @param string $nonce Nonce value.
+	 */
+	private static function ajax_guard( string $nonce ): void {
+		if ( ! wp_verify_nonce( $nonce, self::BULK_NONCE ) ) {
+			wp_send_json_error( self::bulk_error( 'nonce_expired' ) );
+		}
+
+		if ( ! current_user_can( self::CAPABILITY ) ) {
+			wp_send_json_error( self::bulk_error( 'forbidden' ) );
+		}
+	}
+
+	/**
 	 * AJAX: starts the queue.
 	 */
 	public static function ajax_webp_start(): void {
-		check_ajax_referer( self::BULK_NONCE, 'nonce' );
+		$nonce = isset( $_POST['nonce'] ) ? (string) wp_unslash( $_POST['nonce'] ) : '';
 
-		if ( ! current_user_can( self::CAPABILITY ) ) {
-			wp_send_json_error( array( 'code' => 'cap' ) );
+		if ( ! wp_verify_nonce( $nonce, self::BULK_NONCE ) ) {
+			wp_send_json_error( self::bulk_error( 'nonce_expired' ) );
 		}
 
-		self::send_bulk( self::bulk_start() );
+		if ( ! current_user_can( self::CAPABILITY ) ) {
+			wp_send_json_error( self::bulk_error( 'forbidden' ) );
+		}
+
+		try {
+			self::send_bulk( self::bulk_start() );
+		} catch ( \Throwable $error ) {
+			wp_send_json_error( self::bulk_error( 'exception', $error->getMessage() ) );
+		}
 	}
 
 	/**
 	 * AJAX: one batch.
 	 */
 	public static function ajax_webp_batch(): void {
-		check_ajax_referer( self::BULK_NONCE, 'nonce' );
+		$nonce = isset( $_POST['nonce'] ) ? (string) wp_unslash( $_POST['nonce'] ) : '';
 
-		if ( ! current_user_can( self::CAPABILITY ) ) {
-			wp_send_json_error( array( 'code' => 'cap' ) );
+		if ( ! wp_verify_nonce( $nonce, self::BULK_NONCE ) ) {
+			wp_send_json_error( self::bulk_error( 'nonce_expired' ) );
 		}
 
-		self::send_bulk( self::bulk_batch() );
+		if ( ! current_user_can( self::CAPABILITY ) ) {
+			wp_send_json_error( self::bulk_error( 'forbidden' ) );
+		}
+
+		try {
+			self::send_bulk( self::bulk_batch() );
+		} catch ( \Throwable $error ) {
+			wp_send_json_error( self::bulk_error( 'exception', $error->getMessage() ) );
+		}
 	}
 
 	/**
 	 * AJAX: current state.
 	 */
 	public static function ajax_webp_status(): void {
-		check_ajax_referer( self::BULK_NONCE, 'nonce' );
+		$nonce = isset( $_POST['nonce'] ) ? (string) wp_unslash( $_POST['nonce'] ) : '';
+
+		if ( ! wp_verify_nonce( $nonce, self::BULK_NONCE ) ) {
+			wp_send_json_error( self::bulk_error( 'nonce_expired' ) );
+		}
 
 		if ( ! current_user_can( self::CAPABILITY ) ) {
-			wp_send_json_error( array( 'code' => 'cap' ) );
+			wp_send_json_error( self::bulk_error( 'forbidden' ) );
 		}
 
 		wp_send_json_success( self::bulk_status() );
@@ -2093,6 +2168,42 @@ final class MMF_Admin {
 	}
 
 	/**
+	 * Walks users' avatars once and converts what can be converted.
+	 */
+	public static function handle_convert_avatars(): void {
+		if ( ! isset( $_GET['action'] ) || 'mmf_convert_avatars' !== sanitize_key( (string) wp_unslash( $_GET['action'] ) ) ) {
+			return;
+		}
+
+		if ( ! current_user_can( self::CAPABILITY ) ) {
+			wp_die( esc_html__( 'Недостаточно прав.', 'modern-minify' ) );
+		}
+
+		check_admin_referer( self::AVATARS_NONCE );
+
+		$before = (int) MMF_Stats::all()['avatar_sidecar'];
+		$users  = function_exists( 'get_users' ) ? get_users( array( 'fields' => 'ID', 'number' => 500 ) ) : array();
+		$saved  = isset( $_SERVER['HTTP_ACCEPT'] ) ? (string) $_SERVER['HTTP_ACCEPT'] : '';
+		$_SERVER['HTTP_ACCEPT'] = 'image/webp';
+
+		foreach ( (array) $users as $user_id ) {
+			$url = get_avatar_url( (int) $user_id, array( 'size' => 96 ) );
+
+			if ( is_string( $url ) && '' !== $url ) {
+				MMF_Avatars::webp_url( $url );
+			}
+		}
+
+		$_SERVER['HTTP_ACCEPT'] = $saved;
+		$done = max( 0, (int) MMF_Stats::all()['avatar_sidecar'] - $before );
+
+		MMF_Stats::record_action( sprintf( __( 'Аватары обработаны, новых WebP: %d.', 'modern-minify' ), $done ) );
+
+		wp_safe_redirect( add_query_arg( array( 'page' => self::PAGE, 'tab' => 'images', 'mmf-toast' => 'avatars', 'mmf-toast-nonce' => wp_create_nonce( self::TOAST_NONCE ) ), admin_url( 'options-general.php' ) ) );
+		exit;
+	}
+
+	/**
 	 * The whole "Изображения" tab below the fields.
 	 */
 	private static function render_images_tab(): void {
@@ -2124,7 +2235,7 @@ final class MMF_Admin {
 		echo '<h2 class="mmf-section-title">' . esc_html__( 'Массовая конвертация', 'modern-minify' ) . '</h2>';
 		echo '<p class="description">' . esc_html__( 'Только JPEG и PNG без свежей WebP-копии. Пакетами по 20 вложений, только в админке; уже готовые пропускаются.', 'modern-minify' ) . '</p>';
 		echo '<p class="mmf-bulk__text" id="mmf-webp-progress">' . esc_html__( 'обработано 0 из 0', 'modern-minify' ) . '</p>';
-		echo '<div class="mmf-bulk__bar" aria-hidden="true"><span id="mmf-webp-bar" style="width:0%"></span></div>';
+		echo '<div class="mmf-progress" id="mmf-webp-progressbar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><div class="mmf-progress__bar"></div></div>';
 		echo '<p class="description" id="mmf-webp-counts"></p>';
 		echo '<p class="mmf-bulk__actions">';
 		echo '<button type="button" class="button button-primary" id="mmf-webp-start">' . esc_html__( 'Конвертировать существующие изображения', 'modern-minify' ) . '</button> ';
@@ -2149,6 +2260,38 @@ final class MMF_Admin {
 
 		echo '<p class="description">' . esc_html( sprintf( __( 'Найдено готовых WebP на диске: %d', 'modern-minify' ), (int) $disk['files'] ) ) . '</p>';
 		echo '<p class="description">' . esc_html( sprintf( __( 'На диске: %1$d файлов, %2$s МБ', 'modern-minify' ), (int) $disk['files'], number_format( $disk['bytes'] / 1048576, 1, '.', ' ' ) ) ) . '</p>';
+
+		$jobs      = (array) get_option( MMF_Images::JOBS_OPTION, array() );
+		$last_q    = (int) get_option( MMF_Images::LAST_QUEUE_OPTION, 0 );
+		$last_cron = (int) get_option( MMF_Images::LAST_CRON_OPTION, 0 );
+		$cron_done = (int) get_option( MMF_Images::LAST_CRON_COUNT, 0 );
+
+		echo '<p class="description">' . esc_html( sprintf( __( 'В очереди: %d; последняя обработка очереди: %s; последний cron: %s (%d файлов).', 'modern-minify' ), count( $jobs ), $last_q > 0 ? (string) wp_date( 'Y-m-d H:i:s', $last_q ) : __( 'ещё не было', 'modern-minify' ), $last_cron > 0 ? (string) wp_date( 'Y-m-d H:i:s', $last_cron ) : __( 'ещё не было', 'modern-minify' ), $cron_done ) ) . '</p>';
+
+		if ( (bool) MMF_Config::get( 'image_webp_ondemand', false ) && array() !== $jobs && ( time() - max( $last_q, $last_cron ) ) > 3600 ) {
+			echo '<p class="mmf-alert mmf-alert--error" role="alert">' . esc_html__( 'PHP на сайте исполняется редко (кеш страниц) — запустите массовую конвертацию.', 'modern-minify' ) . '</p>';
+		}
+
+		self::status_group(
+			__( 'Почему не WebP', 'modern-minify' ),
+			array(
+				__( 'Аватаров найдено', 'modern-minify' )        => (string) (int) $stats['avatar_found'],
+				__( 'Аватаров с копией', 'modern-minify' )       => (string) (int) $stats['avatar_sidecar'],
+				__( 'Нет поддержки WebP в PHP', 'modern-minify' ) => (string) (int) $stats['avatar_fail_support'],
+				__( 'Не JPEG/PNG', 'modern-minify' )             => (string) (int) $stats['avatar_fail_type'],
+				__( 'Ошибка записи', 'modern-minify' )           => (string) (int) $stats['avatar_fail_write'],
+				__( 'Файл не найден', 'modern-minify' )          => (string) (int) $stats['avatar_fail_missing'],
+				__( 'Внешний URL', 'modern-minify' )             => (string) (int) $stats['avatar_fail_external'],
+				__( 'Конвертер', 'modern-minify' )               => '' !== MMF_Images::method() ? MMF_Images::method() : __( 'недоступен', 'modern-minify' ),
+			)
+		);
+
+		$avatars_url = wp_nonce_url(
+			add_query_arg( array( 'page' => self::PAGE, 'action' => 'mmf_convert_avatars' ), admin_url( 'options-general.php' ) ),
+			self::AVATARS_NONCE
+		);
+
+		echo '<p class="mmf-actions"><a class="button mmf-convert-avatars" href="' . esc_url( $avatars_url ) . '">' . esc_html__( 'Конвертировать все аватары', 'modern-minify' ) . '</a></p>';
 
 		$fmt = static function ( $value ) {
 			return (int) $value > 0 ? (string) (int) $value : '—';
@@ -2235,6 +2378,19 @@ final class MMF_Admin {
 		$resources = isset( $stats['last_resources'] ) && is_array( $stats['last_resources'] ) ? $stats['last_resources'] : array();
 		$analysis  = MMF_Advisor::analyse( $resources );
 
+		usort(
+			$analysis['items'],
+			static function ( $left, $right ) {
+				return (int) $right['size'] <=> (int) $left['size'];
+			}
+		);
+
+		$counts = array( 'all' => count( $analysis['items'] ), 'can' => 0, 'risky' => 0, 'cannot' => 0, 'done' => 0 );
+
+		foreach ( $analysis['items'] as $row ) {
+			$counts[ (string) $row['verdict'] ] = ( $counts[ (string) $row['verdict'] ] ?? 0 ) + 1;
+		}
+
 		echo '<section class="mmf-card mmf-advisor"><h2 class="mmf-section-title">' . esc_html__( 'Что можно отложить', 'modern-minify' ) . '</h2>';
 
 		if ( array() === $analysis['items'] ) {
@@ -2256,6 +2412,25 @@ final class MMF_Admin {
 		);
 		echo '</p>';
 
+		echo '<div class="mmf-advisor-filters" role="group" aria-label="' . esc_attr__( 'Фильтр по вердикту', 'modern-minify' ) . '">';
+		$chips = array(
+			'all'    => __( 'Все', 'modern-minify' ),
+			'can'    => __( 'можно отложить', 'modern-minify' ),
+			'risky'  => __( 'рискованно', 'modern-minify' ),
+			'cannot' => __( 'нельзя', 'modern-minify' ),
+			'done'   => __( 'уже оптимизировано', 'modern-minify' ),
+		);
+
+		foreach ( $chips as $slug => $label ) {
+			echo '<button type="button" class="button mmf-filter' . ( 'all' === $slug ? ' mmf-filter--active' : '' ) . '" data-filter="' . esc_attr( $slug ) . '">' . esc_html( $label . ' ' . (int) ( $counts[ $slug ] ?? 0 ) ) . '</button>';
+		}
+
+		echo '</div>';
+
+		if ( count( $analysis['items'] ) > 20 ) {
+			echo '<p><input type="search" class="mmf-advisor-search" placeholder="' . esc_attr__( 'Поиск по имени или адресу', 'modern-minify' ) . '" /></p>';
+		}
+
 		echo '<div class="mmf-advisor-scroll"><table class="widefat mmf-advisor-table"><thead><tr>';
 		echo '<th scope="col">' . esc_html__( 'Ресурс', 'modern-minify' ) . '</th>';
 		echo '<th scope="col">' . esc_html__( 'До → после', 'modern-minify' ) . '</th>';
@@ -2266,13 +2441,15 @@ final class MMF_Admin {
 		foreach ( $analysis['items'] as $item ) {
 			$verdict = (string) $item['verdict'];
 			$reason  = MMF_Advisor::reason_label( (string) $item['reason'] );
-			$size    = (int) $item['size'] > 0 ? number_format( (float) ( $item['size'] / 1024 ), 1, '.', ' ' ) . ' КБ' : '—';
+			$size    = (int) $item['size'] > 0 ? number_format( (float) ( $item['size'] / 1024 ), 1, ',', ' ' ) . ' КБ' : '—';
 			$after   = (int) ( $item['after'] ?? 0 );
-			$sizes   = $after > 0 && $after !== (int) $item['size'] ? $size . ' → ' . number_format( (float) ( $after / 1024 ), 1, '.', ' ' ) . ' КБ' : $size;
+			$sizes   = $after > 0 && $after !== (int) $item['size'] ? $size . ' → ' . number_format( (float) ( $after / 1024 ), 1, ',', ' ' ) . ' КБ' : $size;
+			$url     = (string) $item['url'];
+			$short   = strlen( $url ) > 74 ? substr( $url, 0, 30 ) . '…' . substr( $url, -40 ) : $url;
 			$source  = (string) ( $item['source'] ?? MMF_Advisor::LOCAL );
 
-			echo '<tr>';
-			echo '<td><span class="mmf-advisor__name">' . esc_html( (string) $item['name'] ) . '</span> <span class="mmf-advisor__path" title="' . esc_attr( (string) $item['url'] ) . '">' . esc_html( (string) $item['url'] ) . '</span>';
+			echo '<tr data-verdict="' . esc_attr( $verdict ) . '" data-size="' . (int) $item['size'] . '" data-search="' . esc_attr( strtolower( (string) $item['name'] . ' ' . $url ) ) . '">';
+			echo '<td><span class="mmf-advisor__name">' . esc_html( (string) $item['name'] ) . '</span> <span class="mmf-advisor__path" title="' . esc_attr( $url ) . '">' . esc_html( $short ) . '</span>';
 			echo '<div class="mmf-advisor__badges"><span class="mmf-source mmf-source--' . esc_attr( $source ) . '">' . esc_html( MMF_Advisor::source_label( $source ) ) . '</span></div>';
 
 			if ( ! empty( $item['files'] ) ) {
@@ -2296,8 +2473,7 @@ final class MMF_Admin {
 			if ( MMF_Advisor::CAN === $verdict || $risky ) {
 				$pattern = $risky ? '*' . basename( (string) wp_parse_url( (string) $item['url'], PHP_URL_PATH ) ) . '*' : (string) $item['pattern'];
 
-				echo '<label class="mmf-bool"><input type="checkbox" class="mmf-advice-pattern' . ( $risky ? ' mmf-advice-risky' : '' ) . '" name="mmf_advice_patterns[]" value="' . esc_attr( $pattern ) . '" checked="checked" /> <span class="mmf-bool__text description">' . esc_html__( 'добавить', 'modern-minify' ) . '</span></label>';
-				echo '<br /><code>' . esc_html( $pattern ) . '</code>';
+				echo '<label class="mmf-bool mmf-advisor-action"><input type="checkbox" class="mmf-advice-pattern' . ( $risky ? ' mmf-advice-risky' : '' ) . '" name="mmf_advice_patterns[]" value="' . esc_attr( $pattern ) . '" checked="checked" title="' . esc_attr( $pattern ) . '" /> <span class="mmf-bool__text">' . esc_html__( 'Отложить', 'modern-minify' ) . '</span></label>';
 			} elseif ( $blocked ) {
 				echo '<span class="description">' . esc_html__( 'жёсткое исключение, не откладывается', 'modern-minify' ) . '</span>';
 			} else {
@@ -2306,8 +2482,6 @@ final class MMF_Admin {
 
 			echo '</td></tr>';
 		}
-
-		echo '</tbody></table></div>';
 
 		echo '</tbody></table></div>';
 
@@ -2327,6 +2501,7 @@ final class MMF_Admin {
 		return <<<'CSS'
 .mmf-wrap{--mmf-bg:#fff;--mmf-surface:#f6f7f7;--mmf-fg:#1d2327;--mmf-muted:#3c434a;--mmf-border:#c3c4c7;--mmf-accent:var(--wp-admin-theme-color,#2271b1);--mmf-ok-fg:#0a5c1c;--mmf-ok-bg:#edfaef;--mmf-err-fg:#7a0f0f;--mmf-err-bg:#fcf0f1;--mmf-toast-fg:#1d2327;--mmf-toast-bg:#fff;--mmf-chip-bg:#f6f7f7;--mmf-chip-off-fg:#3c434a;--mmf-dot-on:#1a7f37;--mmf-dot-off:#8c8f94;--mmf-popover-bg:#fff;--mmf-popover-fg:#1d2327;--mmf-popover-muted:#3c434a;--mmf-badge-bg:#edfaef;--mmf-badge-fg:#0a5c1c;--mmf-warn-bg:#fcf9e8;--mmf-warn-fg:#1d2327;--mmf-warn-num:#b26200;--mmf-radius:8px;--mmf-gap:8px;--mmf-gap-2:16px;--mmf-gap-3:24px;color:var(--mmf-fg);max-width:1400px}
 .mmf-wrap .mmf-tabs{margin-bottom:var(--mmf-gap-2)}
+.mmf-wrap .mmf-panel--hidden{display:none !important}
 .mmf-wrap .mmf-panel .form-table{table-layout:fixed;width:100%}
 .mmf-wrap .mmf-panel .form-table th{width:200px;overflow-wrap:anywhere}
 .mmf-wrap .mmf-panel .form-table th,.mmf-wrap .mmf-panel .form-table td{vertical-align:top}
@@ -2377,10 +2552,35 @@ final class MMF_Admin {
 .mmf-wrap .mmf-verdict--done{background:#f0f0f1;color:#3c434a}
 .mmf-wrap .mmf-examples{margin:8px 0 0;padding:10px 12px;background:var(--mmf-surface);border:1px solid var(--mmf-border);border-radius:var(--mmf-radius);max-width:640px}
 .mmf-wrap .mmf-examples ul{margin:6px 0 0 18px}
-.mmf-wrap .mmf-bulk__bar{height:10px;background:var(--mmf-surface);border:1px solid var(--mmf-border);border-radius:999px;overflow:hidden;margin:8px 0}
-.mmf-wrap .mmf-bulk__bar span{display:block;height:100%;background:var(--mmf-accent);transition:width .2s}
+.mmf-wrap .mmf-progress{height:8px;border-radius:4px;background:#f0f0f1;overflow:hidden;margin:8px 0}
+.mmf-wrap .mmf-progress__bar{height:100%;width:0;background:var(--wp-admin-theme-color,#2271b1);transition:width .2s}
+.mmf-wrap .mmf-progress[hidden]{display:none}
 .mmf-wrap .mmf-bulk__actions{display:flex;gap:var(--mmf-gap);flex-wrap:wrap;margin:12px 0 0}
 .mmf-wrap .mmf-rules{margin:0 0 0 18px}
+.mmf-wrap .mmf-advisor__summary{font-weight:600}
+.mmf-wrap .mmf-advisor-filters{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.mmf-wrap .mmf-advisor-filters .button{font-size:12px;padding:2px 8px;min-height:26px}
+.mmf-wrap .mmf-filter--active{border-color:var(--wp-admin-theme-color);color:var(--wp-admin-theme-color);font-weight:600}
+.mmf-wrap .mmf-advisor-scroll{max-width:100%;overflow-x:auto}
+.mmf-wrap .mmf-advisor-table{table-layout:fixed;width:100%;min-width:720px;border-collapse:collapse}
+.mmf-wrap .mmf-advisor-table th{position:sticky;top:0;z-index:1;background:var(--mmf-bg);white-space:nowrap;padding:6px 8px;text-align:left;border-bottom:1px solid var(--mmf-border)}
+.mmf-wrap .mmf-advisor-table th:nth-child(2),.mmf-wrap .mmf-advisor-table td:nth-child(2){width:110px;text-align:right}
+.mmf-wrap .mmf-advisor-table th:nth-child(3),.mmf-wrap .mmf-advisor-table td:nth-child(3){width:120px}
+.mmf-wrap .mmf-advisor-table th:nth-child(4),.mmf-wrap .mmf-advisor-table td:nth-child(4){width:120px}
+.mmf-wrap .mmf-advisor-table td{height:56px;max-height:56px;padding:4px 8px;vertical-align:middle;border-bottom:1px solid var(--mmf-border);line-height:1.25;overflow:hidden}
+.mmf-wrap .mmf-advisor-table tbody tr:hover{background:var(--mmf-surface)}
+.mmf-wrap .mmf-advisor-table.striped>tbody>:nth-child(odd){background:transparent}
+.mmf-wrap .mmf-advisor__name{font-weight:600;white-space:nowrap}
+.mmf-wrap .mmf-advisor__path{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;color:var(--mmf-muted);font-size:12px}
+.mmf-wrap .mmf-advisor__reason{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:2px 0 0;font-size:12px;color:var(--mmf-muted)}
+.mmf-wrap .mmf-advisor__size{font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+.mmf-wrap .mmf-advisor-table .mmf-verdict{display:inline-block;width:120px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;vertical-align:middle}
+.mmf-wrap .mmf-advisor__badges{display:inline-block;margin-left:4px}
+.mmf-wrap .mmf-source{display:inline-block;padding:1px 6px;border-radius:999px;background:var(--mmf-surface);border:1px solid var(--mmf-border);color:var(--mmf-muted);font-size:11px;white-space:nowrap}
+.mmf-wrap .mmf-source--external{background:#eef4fb;color:#0b4a7a;border-color:#b6d3ea}
+.mmf-wrap .mmf-source--external-known{background:var(--mmf-warn-bg);color:#7a4b00;border-color:#e6d9a8}
+.mmf-wrap .mmf-advisor-action{white-space:nowrap;display:inline-flex;gap:4px;align-items:center}
+@media (max-width:900px){.mmf-wrap .mmf-advisor-scroll{overflow:visible}.mmf-wrap .mmf-advisor-table{display:block;min-width:0}.mmf-wrap .mmf-advisor-table thead{display:none}.mmf-wrap .mmf-advisor-table tbody,.mmf-wrap .mmf-advisor-table tr,.mmf-wrap .mmf-advisor-table td{display:block;width:auto}.mmf-wrap .mmf-advisor-table tr{border:1px solid var(--mmf-border);border-radius:var(--mmf-radius);padding:8px;margin:0 0 8px}.mmf-wrap .mmf-advisor-table td{border:0;height:auto;max-height:none;padding:2px 0}}
 .mmf-wrap .mmf-advisor__summary{font-weight:600}
 .mmf-wrap .mmf-advisor-scroll{max-width:100%;overflow-x:auto}
 .mmf-wrap .mmf-advisor-table{table-layout:fixed;width:100%;min-width:720px;border-collapse:collapse}
@@ -2539,18 +2739,27 @@ if(help&&pop){
   window.addEventListener("scroll",schedule,{passive:true});
   window.addEventListener("resize",schedule);
 }
+var advisorFilters=document.querySelectorAll(".mmf-filter");
+var advisorRows=document.querySelectorAll(".mmf-advisor-table tbody tr[data-verdict]");
+var advisorSearch=document.querySelector(".mmf-advisor-search");
+function advisorApply(){var active=document.querySelector(".mmf-filter--active");var filter=active?active.getAttribute("data-filter"):"all";var term=advisorSearch?advisorSearch.value.toLowerCase():"";for(var i=0;i<advisorRows.length;i++){var row=advisorRows[i];var show=("all"===filter||row.getAttribute("data-verdict")===filter)&&(!term||-1!==(row.getAttribute("data-search")||"").indexOf(term));row.hidden=!show;}}
+for(var fi=0;fi<advisorFilters.length;fi++){advisorFilters[fi].addEventListener("click",function(){for(var j=0;j<advisorFilters.length;j++){advisorFilters[j].classList.remove("mmf-filter--active");}this.classList.add("mmf-filter--active");advisorApply();});}
+if(advisorSearch){advisorSearch.addEventListener("input",advisorApply);}
 var adviceButton=document.querySelector("button[name=\"mmf_apply_advice\"]");
 if(adviceButton){adviceButton.addEventListener("click",function(event){var risky=document.querySelectorAll(".mmf-advice-risky:checked");if(!risky.length){return}var key="mmfAdviceRisky";try{if(window.sessionStorage.getItem(key)){return}window.sessionStorage.setItem(key,"1");}catch(e){}if(!window.confirm(__MMF_ADVICE_RISKY_PROMPT__)){event.preventDefault();}});}
 var asyncLinks=document.querySelectorAll(".mmf-async-css");
 for(var ai=0;ai<asyncLinks.length;ai++){asyncLinks[ai].addEventListener("click",function(event){if(!window.confirm(__MMF_ASYNC_CSS_PROMPT__)){event.preventDefault();}});}
 var exampleButtons=document.querySelectorAll(".mmf-examples-toggle");
 for(var ei=0;ei<exampleButtons.length;ei++){exampleButtons[ei].addEventListener("click",function(){var box=document.getElementById(this.getAttribute("aria-controls"));if(!box){return}var open=!box.hidden;box.hidden=open;this.setAttribute("aria-expanded",open?"false":"true");});}
+var avatarsButton=document.querySelector(".mmf-convert-avatars");
+if(avatarsButton){avatarsButton.addEventListener("click",function(event){if(!window.confirm(__MMF_AVATARS_PROMPT__)){event.preventDefault();}});}
 var webpDelete=document.querySelector(".mmf-delete-webp");
 if(webpDelete){webpDelete.addEventListener("click",function(event){if(!window.confirm(__MMF_WEBP_PROMPT__)){event.preventDefault();}});}
 var bulk=document.getElementById("mmf-webp-bulk");
 if(bulk){
   var bulkNonce=bulk.getAttribute("data-nonce");
-  var bulkBar=document.getElementById("mmf-webp-bar");
+  var bulkProgressBar=document.getElementById("mmf-webp-progressbar");
+  var bulkBar=bulkProgressBar?bulkProgressBar.querySelector(".mmf-progress__bar"):null;
   var bulkProgress=document.getElementById("mmf-webp-progress");
   var bulkCounts=document.getElementById("mmf-webp-counts");
   var bulkStart=document.getElementById("mmf-webp-start");
@@ -2578,7 +2787,7 @@ if(bulk){
   function bulkPaint(state){
     if(!state){return}
     var total=num(state.total),done=num(state.done);
-    if(bulkBar){bulkBar.style.width=(total?Math.round(done/total*100):0)+"%";}
+    if(bulkProgressBar&&bulkBar){var percent=total?Math.round(done/total*100):0;if(total>0){bulkProgressBar.hidden=false;}bulkBar.style.width=percent+"%";bulkProgressBar.setAttribute("aria-valuenow",String(percent));}
     if(bulkProgress){bulkProgress.textContent=total>0?("обработано "+done+" из "+total):"ещё не запускалось";}
     if(bulkCounts&&state.stats){
       var s=state.stats;
@@ -2597,7 +2806,7 @@ if(bulk){
       if(!response||!response.success){bulkToast("Не удалось выполнить пакет. Попробуйте ещё раз.");return}
       var state=response.data;
       bulkPaint(state);
-      if(state.finished){bulkToast("Готово: обработано "+state.total+" изображений. Рекомендуется сбросить кеш.");return}
+      if(state.finished){if(bulkProgressBar&&bulkBar){bulkBar.style.width="100%";bulkProgressBar.setAttribute("aria-valuenow","100");window.setTimeout(function(){bulkProgressBar.hidden=true;},3000);}bulkToast("Готово: обработано "+state.total+" изображений. Рекомендуется сбросить кеш.");return}
       if(state.paused){return}
       bulkTimer=window.setTimeout(bulkRun,60);
     });
@@ -2605,7 +2814,7 @@ if(bulk){
   if(bulkStart){bulkStart.addEventListener("click",function(){bulkPost("mmf_webp_start").then(function(response){if(!response||!response.success){bulkToast("Уже идёт конвертация или запуск недоступен.");return}bulkPaint(response.data);if(parseInt(response.data.total||0,10)===0){bulkToast("Новых изображений нет.");return}bulkRun();});});}
   if(bulkPause){bulkPause.addEventListener("click",function(){if(bulkTimer){window.clearTimeout(bulkTimer);}bulkPost("mmf_webp_pause").then(function(response){if(response&&response.success){bulkPaint(response.data);}});});}
   if(bulkResume){bulkResume.addEventListener("click",function(){bulkPost("mmf_webp_resume").then(function(response){if(response&&response.success){bulkPaint(response.data);bulkRun();}});});}
-  if(bulkStop){bulkStop.addEventListener("click",function(){if(bulkTimer){window.clearTimeout(bulkTimer);}bulkBusy=false;bulkPost("mmf_webp_stop").then(function(){bulkPaint({ids:[],total:0,done:0,stats:{}});});});}
+  if(bulkStop){bulkStop.addEventListener("click",function(){if(bulkTimer){window.clearTimeout(bulkTimer);}bulkBusy=false;if(bulkProgressBar){bulkProgressBar.hidden=true;if(bulkBar){bulkBar.style.width="0%";}bulkProgressBar.setAttribute("aria-valuenow","0");}bulkPost("mmf_webp_stop").then(function(){bulkPaint({ids:[],total:0,done:0,stats:{}});});});}
   bulkPost("mmf_webp_status").then(function(response){if(response&&response.success){bulkPaint(response.data);if(parseInt(response.data.total||0,10)>parseInt(response.data.done||0,10)&&!response.data.paused){bulkRun();}}});
 }
 var links=document.querySelectorAll(".mmf-reset");
@@ -2624,6 +2833,8 @@ JS;
 
 		$js = str_replace( '__MMF_WEBP_PROMPT__', (string) wp_json_encode( __( 'Удалить все созданные WebP? Оригиналы останутся.', 'modern-minify' ) ), $js );
 		$js = str_replace( '__MMF_ADVICE_RISKY_PROMPT__', (string) wp_json_encode( __( 'Откладывать скрипты плагинов рискованно: проверьте страницу после сохранения.', 'modern-minify' ) ), $js );
+
+		$js = str_replace( '__MMF_AVATARS_PROMPT__', (string) wp_json_encode( __( 'Пройти по пользователям и конвертировать их аватары? Это может занять время.', 'modern-minify' ) ), $js );
 
 		return str_replace( '__MMF_ASYNC_CSS_PROMPT__', (string) wp_json_encode( __( 'Асинхронный CSS может дать вспышку неоформленного контента (FOUC). Проверьте первый экран.', 'modern-minify' ) ), $js );
 	}

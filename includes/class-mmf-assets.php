@@ -112,6 +112,26 @@ final class MMF_Assets {
 
 		// `defer_js` is all-or-nothing: if one external script would stay in
 		// the normal flow, deferring the rest reorders the page.
+		if ( ! empty( $settings['move_scripts_to_footer'] ) ) {
+			$head_end = stripos( $html, '</head>' );
+			$head     = false === $head_end ? $html : substr( $html, 0, $head_end );
+
+			foreach ( MMF_HTML::tokenize( $head ) as $head_token ) {
+				if ( 'tag' !== $head_token['type'] || $head_token['closing'] || 'script' !== $head_token['name'] ) {
+					continue;
+				}
+
+				$head_attrs = self::attributes( (string) $head_token['raw'] );
+				$head_src   = (string) ( $head_attrs['src'] ?? '' );
+				$head_type  = strtolower( trim( (string) ( $head_attrs['type'] ?? '' ) ) );
+
+				if ( '' === $head_src || ! self::is_local_url( $head_src ) || str_contains( $head_type, 'module' ) || self::matches( $head_src, $settings['exclude_js'] ?? array() ) ) {
+					$settings['__mmf_no_move'] = true;
+					break;
+				}
+			}
+		}
+
 		$defer_state = self::defer_state( $html, $settings );
 		$defer_all   = ! empty( $defer_state['allowed'] );
 
@@ -721,7 +741,9 @@ final class MMF_Assets {
 		// moves anything: its whole point is document order.
 		$result['move'] = ! $rocket
 			&& ! empty( $settings['move_scripts_to_footer'] )
-			&& ! self::has_attribute( $tag, 'async' );
+			&& ! self::has_attribute( $tag, 'async' )
+			&& ! self::has_attribute( $tag, 'data-mmf-bundle' )
+			&& empty( $settings['__mmf_no_move'] );
 
 		return $result;
 	}
