@@ -334,20 +334,107 @@ final class MMF_Fonts {
 	 * @param string $href   Google Fonts stylesheet URL.
 	 * @param string $method Fonts method, part of the cache signature.
 	 */
+	/** Folder under uploads that holds the localised fonts, not the cache. */
+	private const FONT_DIR = 'mmf-fonts';
+
+	/**
+	 * Absolute path of the font folder, created on demand.
+	 */
+	private static function font_dir(): string {
+		static $dir = null;
+
+		if ( null !== $dir ) {
+			return $dir;
+		}
+
+		$uploads = wp_upload_dir( null, false );
+		$base    = is_array( $uploads ) && empty( $uploads['error'] ) ? (string) ( $uploads['basedir'] ?? '' ) : '';
+
+		if ( '' === $base ) {
+			$dir = '';
+			return $dir;
+		}
+
+		$path = trailingslashit( $base ) . self::FONT_DIR;
+
+		if ( ! is_dir( $path ) && ! wp_mkdir_p( $path ) ) {
+			$dir = '';
+			return $dir;
+		}
+
+		$dir = trailingslashit( $path );
+
+		return $dir;
+	}
+
+	/**
+	 * Public URL of the font folder.
+	 */
+	private static function font_base_url(): string {
+		$uploads = wp_upload_dir( null, false );
+		$url     = is_array( $uploads ) && empty( $uploads['error'] ) ? (string) ( $uploads['baseurl'] ?? '' ) : '';
+
+		return '' !== $url ? trailingslashit( $url ) . self::FONT_DIR . '/' : '';
+	}
+
+	/**
+	 * Whether a localised file is present.
+	 *
+	 * @param string $name File name.
+	 */
+	private static function font_has( string $name ): bool {
+		$dir = self::font_dir();
+
+		return '' !== $dir && is_file( $dir . $name );
+	}
+
+	/**
+	 * Writes a localised file atomically.
+	 *
+	 * @param string $name File name.
+	 * @param string $data Contents.
+	 */
+	private static function font_write( string $name, string $data ): bool {
+		$dir = self::font_dir();
+
+		if ( '' === $dir ) {
+			return false;
+		}
+
+		$tmp = $dir . $name . '.' . getmypid() . '.tmp';
+
+		if ( false === file_put_contents( $tmp, $data ) ) {
+			return false;
+		}
+
+		return rename( $tmp, $dir . $name );
+	}
+
+	/**
+	 * Public URL of a localised file.
+	 *
+	 * @param string $name File name.
+	 */
+	private static function font_url_of( string $name ): string {
+		$base = self::font_base_url();
+
+		return '' !== $base ? $base . $name : '';
+	}
+
 	private static function localize( string $href, string $method ): string {
 		if ( array_key_exists( $href, self::$memo ) ) {
 			return self::$memo[ $href ];
 		}
 
 		$css_name = MMF_Cache::hash( $href, 'fonts', array( 'fonts_method' => $method ) ) . '.fonts.css';
-		$css_url  = MMF_Cache::url_of( $css_name );
+		$css_url  = self::font_url_of( $css_name );
 
 		if ( '' === $css_url ) {
 			return '';
 		}
 
 		// A warm cache answers without a single network request.
-		if ( MMF_Cache::has_file( $css_name ) ) {
+		if ( self::font_has( $css_name ) ) {
 			self::$memo[ $href ] = $css_url;
 
 			return $css_url;
@@ -388,13 +475,13 @@ final class MMF_Fonts {
 				return '';
 			}
 
-			if ( ! MMF_Cache::has_file( $font_name ) && ! MMF_Cache::write_file( $font_name, $binary ) ) {
+			if ( ! self::font_has( $font_name ) && ! self::font_write( $font_name, $binary ) ) {
 				self::$memo[ $href ] = '';
 
 				return '';
 			}
 
-			$local = MMF_Cache::url_of( $font_name );
+			$local = self::font_url_of( $font_name );
 
 			if ( '' === $local ) {
 				self::$memo[ $href ] = '';
@@ -411,7 +498,7 @@ final class MMF_Fonts {
 			self::$url_map = array_merge( self::$url_map, $replacements );
 		}
 
-		if ( ! MMF_Cache::write_file( $css_name, $css ) ) {
+		if ( ! self::font_write( $css_name, $css ) ) {
 			self::$memo[ $href ] = '';
 
 			return '';
